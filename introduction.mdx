@@ -1,0 +1,82 @@
+---
+title: "EmulatorOS: Open-Source Browser Gaming Platform"
+sidebarTitle: "Introduction"
+description: "EmulatorOS is a browser-based gaming platform delivering 100+ HTML5 games and retro console emulation via WebAssembly, deployable as a static GitHub Pages site."
+---
+
+EmulatorOS is a fully static, open-source gaming platform that runs entirely in the browser — no servers, no downloads, no accounts required. It combines two independent pillars under one roof: a curated library of 100+ HTML5 web games playable directly in an `<iframe>`, and a deep retro console emulation layer powered by EmulatorJS (a WebAssembly port of the libretro/RetroArch ecosystem). Both pillars are served from GitHub Pages at zero infrastructure cost. The platform ships as **v1.4.0** (semantic versioning: Major.Minor.Patch, defined in `main.js`) and is installable as a Progressive Web App, meaning players can pin it to their home screen and continue playing offline.
+
+## The Two Pillars
+
+<CardGroup cols={2}>
+  <Card title="HTML5 Web Games" icon="gamepad">
+    Over 100 curated web games embedded via `<iframe>` — each with its own game page, description, controls reference, and fullscreen button. Games are self-contained HTML5 bundles requiring no plugins.
+  </Card>
+  <Card title="Retro ROM Emulation" icon="microchip">
+    EmulatorJS runs 25+ console cores compiled to WebAssembly. Supported systems include NES, SNES, N64, GBA, Nintendo DS, PlayStation, Sega Genesis/CD/32X, Atari 2600/7800/Jaguar, PSP, and more.
+  </Card>
+  <Card title="PWA & Offline Play" icon="wifi-slash">
+    A registered service worker (`sw.js`) caches the application shell under cache version `v2`. Users can install EmulatorOS to their home screen and play without an internet connection after the first visit.
+  </Card>
+  <Card title="Tab Cloaking" icon="eye-slash">
+    The shared `main.js` reads `localStorage` keys `title` and `icon` on every page load, replacing the browser tab title and favicon with user-chosen values — useful in shared or restricted environments.
+  </Card>
+</CardGroup>
+
+## Platform Architecture
+
+EmulatorOS is deliberately simple: every file is static, meaning the entire platform deploys with a single `git push` to GitHub Pages. The emulation engine itself lives under `data/` — `loader.js` reads `EJS_*` globals set on the page, dynamically injects the minified engine bundle and stylesheet, then hands control to the `EmulatorJS` class. Save data is persisted in the browser's IndexedDB filesystem (`IDBFS`) at `/data/saves`, so progress survives page refreshes without any backend.
+
+<Info>
+  EmulatorOS version **v1.4.0** is the current stable release. The version string is assembled at runtime from the semantic array `['1', '4', '0']` in `main.js` — bumping any element triggers downstream version-awareness logic across the platform.
+</Info>
+
+## Supported Emulator Cores
+
+EmulatorJS ships 25 WebAssembly core `.data` files in `data/cores/`. Each core handles one or more console families:
+
+| System | Core |
+|---|---|
+| NES | `fceumm`, `nestopia` |
+| SNES | `snes9x` |
+| Nintendo 64 | `mupen64plus_next`, `parallel_n64` |
+| Game Boy / GBC | `gambatte` |
+| Game Boy Advance | `mgba` |
+| Nintendo DS | `melonds`, `desmume2015` |
+| PlayStation | `pcsx_rearmed`, `mednafen_psx_hw` |
+| PSP | `ppsspp` |
+| Sega MD / MS / GG / CD | `genesis_plus_gx` |
+| Sega 32X | `picodrive` |
+| Sega Saturn | `yabause` |
+| Atari 2600 | `stella2014` |
+| Atari 7800 | `prosystem` |
+| Atari 5200 | `a5200` |
+| Atari Jaguar | `virtualjaguar` |
+| Virtual Boy | `beetle_vb` |
+| Atari Lynx | `handy` |
+| 3DO | `opera` |
+| Arcade (CPS1/CPS2/Neo Geo) | `fbalpha2012_cps1`, `fbalpha2012_cps2`, `fbneo` |
+| MAME | `mame2003` |
+
+## Deployment Model
+
+The platform targets **GitHub Pages** as its primary host. Because everything is static HTML, CSS, and JS, it can also be served from any CDN, Netlify, Vercel, or a local HTTP server with no build step required. There is no Node.js build pipeline, no bundler, and no server-side logic.
+
+<Note>
+  GitHub Pages enforces HTTPS, which is a hard requirement for service workers and the `beforeinstallprompt` PWA install event. Running the site over plain `http://` will silently disable both PWA install prompts and offline caching.
+</Note>
+
+## Localization
+
+The emulation UI supports 14 languages via JSON translation files in `data/localization/`. Set the `EJS_language` global before loading `loader.js` to activate a locale. Available locales include `ar-AR`, `de-GER`, `es-ES`, `fr` (via `af-FR`), `hi-HI`, `ja-JA`, `ko-KO`, `pt-BR`, `ru-RU`, `zh-CN`, and more.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Fork the repo, serve it locally, and launch your first ROM in under five minutes.
+  </Card>
+  <Card title="PWA Install" icon="mobile" href="/pwa-install">
+    Learn how the service worker and Web App Manifest enable offline play and home screen installation.
+  </Card>
+</CardGroup>

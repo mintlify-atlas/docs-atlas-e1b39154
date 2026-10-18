@@ -1,0 +1,260 @@
+---
+title: "Install EmulatorOS as a PWA on Any Device"
+sidebarTitle: "PWA Install"
+description: "EmulatorOS is a fully installable Progressive Web App with a cache-first service worker, fullscreen manifest, and automatic install prompts on desktop and mobile."
+---
+
+EmulatorOS ships as a first-class Progressive Web App (PWA). Once a visitor loads the site over HTTPS, the browser registers a service worker that intercepts all network requests and serves cached responses instantly on repeat visits. A Web App Manifest declares the app's identity, icon, and display preferences so browsers know how to install it to the home screen or taskbar. Together these two pieces give players a native-app feel — launch from the home screen, fill the entire display, and play even when the network drops out.
+
+## Web App Manifest
+
+The manifest lives at `manifest.json` in the project root. It is a minimal, focused declaration:
+
+```json title="manifest.json"
+{
+  "name": "EmulatorOS",
+  "short_name": "Canvas",
+  "start_url": ".",
+  "display": "fullscreen",
+  "background_color": "black",
+  "description": "EmulatorOS",
+  "icons": [{
+    "src": "icon.png",
+    "sizes": "512x512",
+    "type": "image/png"
+  }]
+}
+```
+
+Key fields and their effect:
+
+<AccordionGroup>
+  <Accordion title="name and short_name">
+    `name` (`"EmulatorOS"`) is displayed during the install prompt and in the app switcher. `short_name` (`"Canvas"`) is the label used below the icon on the home screen where space is constrained — keeping it to one word avoids truncation on small launchers.
+  </Accordion>
+  <Accordion title="display: fullscreen">
+    Setting `display` to `"fullscreen"` removes the browser chrome entirely — no address bar, no navigation buttons. Combined with the emulator's own canvas-fill styling, this makes the installed app indistinguishable from a native game launcher.
+  </Accordion>
+  <Accordion title="background_color: black">
+    `background_color` is applied to the splash screen shown while the app is loading after launch. Black is the correct choice here because the emulator canvas is always rendered on a dark background, avoiding a jarring white flash at startup.
+  </Accordion>
+  <Accordion title="start_url: .">
+    `start_url` of `"."` resolves to the site root, so launching the installed PWA always opens the homepage regardless of which page the user was on when they installed it.
+  </Accordion>
+  <Accordion title="icons">
+    A single 512×512 PNG icon (`icon.png`) satisfies the minimum requirement for Android home screen icons, Chrome's install badge, and Windows taskbar pinning. Browsers will scale it down for smaller contexts (e.g., 192×192 for Android adaptive icons).
+  </Accordion>
+</AccordionGroup>
+
+## Service Worker Registration
+
+Service worker registration is handled by `sw-loader.js`, which is included on every page of the platform. It registers `sw.js` at the site root scope:
+
+```js title="sw-loader.js"
+// Register Service Worker
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').then(function(reg) {
+        // registration worked
+        console.log('Registration succeeded. Scope is ' + reg.scope);
+    }).catch(function(error) {
+        // registration failed
+        console.log('Registration failed with ' + error);
+    });
+}
+```
+
+Registering at `/sw.js` (the root path) means the worker's **scope** is the entire origin — every page, every asset request, every game file is eligible to be served from cache.
+
+<Note>
+  Service workers require HTTPS or `localhost`. If the site is served over plain HTTP on a non-localhost domain, `navigator.serviceWorker.register()` is called on an `undefined` object and the registration silently fails. GitHub Pages enforces HTTPS automatically.
+</Note>
+
+## Service Worker Lifecycle
+
+The service worker in `sw.js` runs three lifecycle events:
+
+### Install
+
+```js title="sw.js — install event"
+var CACHE_NAME = 'v2';
+
+var urlsToCache = [];
+
+self.addEventListener('install', function (event) {
+   event.waitUntil(
+      caches.open(CACHE_NAME)
+         .then(function (cache) {
+            console.log('Opened cache');
+            return cache.addAll(urlsToCache);
+         }).then(() => {
+            console.log('Cache downloaded');
+            self.skipWaiting();
+         })
+   );
+});
+```
+
+On install, the worker opens (or creates) the cache bucket named **`'v2'`** and pre-caches every URL in `urlsToCache`. The current `urlsToCache` array is empty — meaning no assets are pre-fetched during install — and the cache is populated lazily on first request instead. `self.skipWaiting()` forces the new worker to become active immediately without waiting for existing tabs to close.
+
+<Info>
+  The `CACHE_NAME` version string (`'v2'`) acts as a cache-busting mechanism. When a new version of the service worker is deployed with a bumped `CACHE_NAME`, the activate event deletes all caches whose names are not in the allowlist, ensuring stale assets are purged automatically.
+</Info>
+
+### Fetch (Cache-First Strategy)
+
+```js title="sw.js — fetch event"
+self.addEventListener('fetch', function (event) {
+   event.respondWith(
+       caches.match(event.request)
+           .then(function (response) {
+               // Cache hit - return response
+               if (response) {
+                   return response;
+               }
+               console.log('cache miss', event.request.url);
+               return fetch(event.request);
+           })
+   );
+});
+```
+
+Every outgoing request passes through a **cache-first** strategy:
+
+1. `caches.match()` checks all open caches for a matching request.
+2. If a cached response exists, it is returned immediately — no network round-trip.
+3. On a cache miss, the request falls through to the network via `fetch()`. The response is not automatically written back to the cache (runtime caching is not implemented), so only assets explicitly added to `urlsToCache` during install — or added programmatically — are served offline.
+
+### Activate
+
+```js title="sw.js — activate event"
+self.addEventListener('activate', function (event) {
+   console.log('activated, remove unused cache...');
+   var cacheAllowlist = [CACHE_NAME];
+   event.waitUntil(
+       caches.keys().then(function (cacheNames) {
+           return Promise.all(
+               cacheNames.map(function (cacheName) {
+                   if (cacheAllowlist.indexOf(cacheName) === -1) {
+                       return caches.delete(cacheName);
+                   }
+               })
+           );
+       })
+   );
+  clients.matchAll({includeUncontrolled: true, type: 'window'}).then((arr) => {
+     for (client of arr) {
+        client.postMessage({type: 'updated'});
+     }
+  });
+});
+```
+
+On activation, the worker:
+1. Iterates every named cache in the browser's cache storage.
+2. Deletes any cache whose name is **not** `'v2'` (the current `CACHE_NAME`). This cleans up `'v1'` or any other stale caches left from previous deployments.
+3. Broadcasts an `{type: 'updated'}` message to every controlled window, so the page can show a "New version available — reload" notice if desired.
+
+## Install Prompt Handling
+
+`sw-loader.js` also captures the browser's `beforeinstallprompt` event and defers it until the user's first click on the page:
+
+```js title="sw-loader.js — install prompt"
+(function() {
+    var cnt = 0;
+    // Prompt to install PWA
+    window.onbeforeinstallprompt = function(e) {
+        cnt += 1;
+        if (cnt > 2) {
+            return;
+        }
+        console.log('Before install prompt', e);
+        e.preventDefault();
+        var deferredPrompt = e;
+        window.onclick = function(e) {
+            deferredPrompt.prompt();
+            window.onclick = null;
+        }
+    };
+})();
+```
+
+The logic works as follows:
+
+- `e.preventDefault()` suppresses the browser's default mini-infobar so the experience can be controlled manually.
+- The prompt is stored in `deferredPrompt` and triggered on the user's next click anywhere on the page.
+- `window.onclick` is set to `null` after firing, preventing the dialog from appearing more than once per gesture.
+- The `cnt` counter caps the handler at two invocations — if the event fires more than twice (which can happen in some browser versions), subsequent firings are ignored.
+
+<Warning>
+  `beforeinstallprompt` only fires if the browser's PWA installability criteria are met: the site must be served over HTTPS, have a registered service worker, and have a valid manifest with at minimum a `name`, `icons`, and `start_url`. Meeting all three is required for the prompt to appear.
+</Warning>
+
+## How to Install EmulatorOS
+
+<Tabs>
+  <Tab title="Chrome on Desktop">
+    <Steps>
+      <Step title="Open the site">
+        Navigate to [https://emulatoros.github.io](https://emulatoros.github.io) in Google Chrome.
+      </Step>
+      <Step title="Locate the install icon">
+        Look for the install icon (a monitor with a down-arrow) in the right side of the address bar. It appears once Chrome has detected the valid PWA manifest and service worker.
+      </Step>
+      <Step title="Click Install">
+        Click the icon and then click **Install** in the confirmation dialog. EmulatorOS opens in its own app window with no browser chrome.
+      </Step>
+      <Step title="Launch from the taskbar">
+        Find EmulatorOS in your system app launcher or taskbar. The app opens in fullscreen mode as declared in the manifest.
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Chrome / Edge on Android">
+    <Steps>
+      <Step title="Open the site">
+        Visit [https://emulatoros.github.io](https://emulatoros.github.io) in Chrome or Edge on Android.
+      </Step>
+      <Step title="Wait for the banner or tap the menu">
+        Chrome may display an **"Add to Home screen"** bottom sheet automatically after a few seconds (triggered by the deferred `beforeinstallprompt`). Alternatively, tap the three-dot menu and select **Add to Home screen**.
+      </Step>
+      <Step title="Confirm installation">
+        Tap **Add** in the dialog. The EmulatorOS icon (512×512 `icon.png`) appears on your home screen with the label **Canvas** (from `short_name`).
+      </Step>
+      <Step title="Launch and play">
+        Tap the icon to launch. The app opens fullscreen with no browser UI, using the black splash screen defined in `background_color`.
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Safari on iOS">
+    <Steps>
+      <Step title="Open the site">
+        Navigate to [https://emulatoros.github.io](https://emulatoros.github.io) in Safari on iPhone or iPad.
+      </Step>
+      <Step title="Open the Share sheet">
+        Tap the **Share** button (box with an up-arrow) in the Safari toolbar.
+      </Step>
+      <Step title="Add to Home Screen">
+        Scroll down in the share sheet and tap **Add to Home Screen**. Edit the name if desired, then tap **Add**.
+      </Step>
+      <Step title="Launch">
+        The EmulatorOS icon appears on your home screen. Safari PWAs on iOS run in a standalone `WKWebView` — the manifest `display: fullscreen` gives a full-screen experience.
+      </Step>
+    </Steps>
+
+    <Note>
+      iOS does not support the `beforeinstallprompt` event. The install prompt logic in `sw-loader.js` has no effect on Safari; users must follow the manual share-sheet flow above.
+    </Note>
+  </Tab>
+</Tabs>
+
+## Cache Versioning and Updates
+
+When a new version of EmulatorOS is deployed, the `CACHE_NAME` constant in `sw.js` should be bumped (e.g., from `'v2'` to `'v3'`). The next time a user visits the site:
+
+1. The browser downloads the updated `sw.js`.
+2. The new worker installs and calls `self.skipWaiting()`, taking control immediately.
+3. The activate event runs, deletes the old `'v2'` cache, and broadcasts `{type: 'updated'}` to all open windows.
+4. The page can listen for this message via `navigator.serviceWorker.addEventListener('message', ...)` and prompt the user to reload for the latest version.
+
+<Tip>
+  Because `urlsToCache` is currently an empty array, the service worker does not pre-cache any files during installation. All caching is opportunistic — assets are only cached if you explicitly call `cache.put()` or `cache.add()` from within the fetch handler. To enable true offline play for the full game library, populate `urlsToCache` with the paths to your critical shell assets and frequently played game files.
+</Tip>

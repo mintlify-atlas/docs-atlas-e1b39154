@@ -1,0 +1,261 @@
+---
+title: "Add New Games to Your EmulatorOS Instance"
+sidebarTitle: "Adding Games"
+description: "Learn how to add HTML5 iframe games and ROM-based emulated games to EmulatorOS, from file structure to navigation integration."
+---
+
+Every game on EmulatorOS lives as a standalone HTML file at the repository root. The page wraps the game in a consistent `content-wrapper` layout, loads shared scripts, and exposes a fullscreen button and a description section. Whether you are embedding a third-party HTML5 title in an iframe or wiring up a retro ROM through EmulatorJS, the shell structure is the same — only the content area differs.
+
+## Decide the Game Type
+
+Before creating the file, determine which delivery mechanism your game needs.
+
+<CardGroup cols={2}>
+  <Card title="Iframe Embed" icon="window-maximize">
+    Use for HTML5 games, Flash-converted titles, or any game already hosted as a standalone web page. Point an `<iframe>` at the game's URL or local path.
+  </Card>
+  <Card title="ROM Emulation" icon="microchip">
+    Use for retro console ROMs (NES, SNES, N64, GBA, PSX, etc.). EmulatorJS loads the ROM via WebAssembly and the appropriate core.
+  </Card>
+</CardGroup>
+
+## Steps to Add a Game
+
+<Steps>
+  ### Create the HTML file
+
+  Create a new `.html` file at the repository root with a descriptive, URL-friendly name — for example `sonic3.html` or `mario-kart.html`. Avoid spaces; use hyphens instead.
+
+  ### Build the page shell
+
+  Every game page on EmulatorOS uses the same outer structure. Copy this template and update the highlighted values:
+
+  ```html title="mygame.html"
+  <!DOCTYPE html>
+  <html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="title" content="emulatoros">
+    <meta name="description" content="Play your favorite online games free now!">
+    <meta name="language" content="English">
+    <title>My Game Title</title>
+    <link rel="icon" type="image/x-icon" href="/assets/img/socials/emulatoros.png" />
+    <link rel="mask-icon" type="" href="/assets/img/socials/emulatoros.png" color="#111" />
+    <link rel="stylesheet" href="/main.css">
+    <link rel="stylesheet" href="/contentpage.css">
+    <link rel="stylesheet"
+      href="https://pro.fontawesome.com/releases/v5.10.0/css/all.css"
+      integrity="sha384-AYmEC3Yw5cVb3ZcuHtOA93w35dYTsvhLPVnYs9eStHfGJvOvKxVfELGroGkvsg+p"
+      crossorigin="anonymous" />
+    <noscript>Your browser doesn't have JavaScript enabled.</noscript>
+    <style>
+      html { scroll-behavior: smooth; }
+      body {
+        font-family: 'Syne', sans-serif;
+        background-color: #000000;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="content-wrapper">
+      <div class="main-content">
+        <section class="content">
+          <div class="content-container">
+
+            <!-- GAME CONTENT GOES HERE -->
+
+            <div class="bar">
+              <div class="bar-left">
+                <h1 id="content-title">My Game Title</h1>
+                <h3 id="content-creator">by Studio Name</h3>
+              </div>
+              <button onclick="iFullscreen()">
+                <i class="fas fa-expand fa-2x"></i>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <div class="desc">
+          <h1>Description</h1>
+          <p id="content-desc">A short description of the game.</p>
+          <br>
+          <h1>Controls</h1>
+          <ul id="content-controls">
+            <p>Arrow Keys / WASD: Move</p>
+            <p>Space: Action</p>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script src="/main.js"></script>
+    <script src="/contentpage.js"></script>
+  </body>
+
+  </html>
+  ```
+
+  The three scripts at the bottom are required on every game page:
+
+  | Script | Purpose |
+  |---|---|
+  | jQuery CDN | DOM utilities used by `main.js` and `contentpage.js` |
+  | `/main.js` | Injects the shared navbar, applies tab cloaking, and runs analytics |
+  | `/contentpage.js` | Wires up `iFullscreen()` and other content-page interactions |
+
+  ### Add the game content
+
+  Replace the `<!-- GAME CONTENT GOES HERE -->` comment with the appropriate embed.
+
+  <Tabs>
+    <Tab title="Iframe Game">
+      For HTML5 or Flash-converted games, place an `<iframe>` directly inside `.content-container`, before the `.bar` div. The `retro.html` page demonstrates the standard pattern:
+
+      ```html title="Iframe embed (from retro.html)"
+      <iframe
+        src="/gfile/my-game/"
+        allowfullscreen
+        scrolling="no"
+        style="height: 506.25px;">
+      </iframe>
+      ```
+
+      **Choosing iframe dimensions:**
+
+      - Standard widescreen (16:9): `height: 506.25px` with the default 100% width gives a 900×506 viewport
+      - Square arcade titles: set both `width` and `height` explicitly (e.g., `width: 640px; height: 640px`)
+      - Fixed-width games: wrap the iframe in a `<div class="content-container" style="width: 960px; height: 100%">` as seen in `game.html`
+
+      <Tip>
+        Always set `scrolling="no"` on the iframe. EmulatorOS content pages use `iFullscreen()` to stretch the nearest iframe to full screen, and a scrollbar inside the frame breaks that behaviour.
+      </Tip>
+    </Tab>
+    <Tab title="ROM-Based Emulation">
+      For retro console ROMs, declare the EmulatorJS configuration globals and load `data/loader.js`. Place this block inside `.content-container`, before the `.bar` div:
+
+      ```html title="ROM embed (based on bomberman.html)"
+      <div class="emscripten" style="width: 860px; height: 480px; max-width: 100%">
+        <div id="game"></div>
+      </div>
+
+      <script type="text/javascript">
+        EJS_player      = '#game';
+        EJS_core        = 'n64';        // see core table below
+        EJS_biosUrl     = '';           // path to BIOS if required
+        EJS_gameUrl     = '/gdata/my-rom.z64';
+        EJS_pathtodata  = 'data/';
+        EJS_startOnLoaded = false;
+      </script>
+
+      <script src="data/loader.js"></script>
+      ```
+
+      `data/loader.js` reads these globals, resolves paths, and instantiates the `EmulatorJS` engine. `EJS_pathtodata` must point to the `data/` directory relative to the page URL.
+    </Tab>
+  </Tabs>
+
+  ### Choose the correct `EJS_core`
+
+  The `EJS_core` value determines which WebAssembly core is loaded from `data/cores/`. Available cores and their canonical string values:
+
+  | Console | `EJS_core` value | Core `.data` file |
+  |---|---|---|
+  | Nintendo Entertainment System | `nes` | `fceumm-wasm.data` / `nestopia-wasm.data` |
+  | Super Nintendo | `snes` | `snes9x-wasm.data` |
+  | Nintendo 64 | `n64` | `mupen64plus_next-wasm.data` / `parallel_n64-wasm.data` |
+  | Game Boy / Game Boy Color | `gb` | `gambatte-wasm.data` |
+  | Game Boy Advance | `gba` | `mgba-wasm.data` |
+  | Nintendo DS | `nds` | `melonds-wasm.data` |
+  | PlayStation | `psx` | `pcsx_rearmed-wasm.data` / `mednafen_psx_hw-wasm.data` |
+  | Sega Mega Drive / Genesis | `segaMD` | `genesis_plus_gx-wasm.data` / `picodrive-wasm.data` |
+  | Sega Master System | `segaMS` | `genesis_plus_gx-wasm.data` |
+  | Sega CD | `segaCD` | `genesis_plus_gx-wasm.data` |
+  | Sega 32X | `sega32x` | `picodrive-wasm.data` |
+  | Sega Game Gear | `segaGG` | `genesis_plus_gx-wasm.data` |
+  | Sega Saturn | `segaSaturn` | `yabause-wasm.data` |
+  | Atari 2600 | `atari2600` | `stella2014-wasm.data` |
+  | Atari 7800 | `atari7800` | `prosystem-wasm.data` |
+  | Atari Lynx | `lynx` | `handy-wasm.data` |
+  | Atari Jaguar | `jaguar` | `virtualjaguar-wasm.data` |
+  | Virtual Boy | `vb` | `beetle_vb-wasm.data` |
+  | PlayStation Portable | `psp` | `ppsspp-wasm.data` |
+  | 3DO | `3do` | `opera-wasm.data` |
+  | Arcade (FBNeo) | `arcade` | `fbneo-wasm.data` |
+
+  <Note>
+    The drag-and-drop ROM loader at `emulatorjs.html` auto-detects core by file extension. For programmatic page creation, always set `EJS_core` explicitly.
+  </Note>
+
+  ### Add the `.bar` and fullscreen button
+
+  The `.bar` div sits immediately after the game content area inside `.content-container`. It holds the title, optional creator credit, and the fullscreen trigger button:
+
+  ```html title="Bar div pattern"
+  <div class="bar">
+    <div class="bar-left">
+      <h1 id="content-title">Bomberman 64</h1>
+      <h3 id="content-creator">by Hudson Soft</h3>
+    </div>
+    <button onclick="iFullscreen()">
+      <i class="fas fa-expand fa-2x"></i>
+    </button>
+  </div>
+  ```
+
+  `iFullscreen()` is defined in `contentpage.js`. It targets the nearest `<iframe>` or emulator canvas and requests the browser's Fullscreen API. The Font Awesome `fa-expand` icon is loaded via the Pro CDN link in the `<head>`.
+
+  ### Write the `.desc` section
+
+  Below the closing `</section>` tag, add a `.desc` block describing the game and its controls. This content is indexed by search engines and shown below the game viewport:
+
+  ```html title="Description and controls block"
+  <div class="desc">
+    <h1>Description</h1>
+    <p id="content-desc">
+      Bomberman 64 is a 3D action puzzle game for the Nintendo 64,
+      developed by Hudson Soft. Collect gems, defeat enemies, and
+      defuse bombs across multi-level worlds.
+    </p>
+    <br>
+    <h1>Controls</h1>
+    <ul id="content-controls">
+      <p>Arrow Keys / Analog Stick: Move</p>
+      <p>A: Place bomb</p>
+      <p>B: Kick bomb</p>
+      <p>Z: Crouch / grab</p>
+    </ul>
+  </div>
+  ```
+
+  ### Register the game in site navigation
+
+  Open `main.js`. The shared navbar is constructed in the `$header.innerHTML` template string. Add a link to your new game in the appropriate navigation section, or ensure the game's HTML file is reachable from the home page game grid by following the existing link patterns on `index.html`.
+
+  <Info>
+    EmulatorOS has no server-side routing. Every game page is a discrete HTML file discovered by the browser directly. As long as the file exists at the repo root and is committed to the `main` branch, it is live after the GitHub Pages workflow runs.
+  </Info>
+</Steps>
+
+## Quick Reference: Required Page Structure
+
+```
+repo-root/
+├── mygame.html          ← your new file
+├── main.css             ← shared stylesheet (do not modify path)
+├── contentpage.css      ← content-page layout stylesheet
+├── main.js              ← navbar + tab cloaking (loaded by every page)
+├── contentpage.js       ← fullscreen + content-page logic
+└── data/
+    ├── loader.js        ← EmulatorJS bootstrap (ROM pages only)
+    └── cores/           ← WebAssembly core .data files
+```
+
+<Warning>
+  ROM files (`/gdata/`) are never committed to the public repository. Store them on a CDN or a separate private origin and set `EJS_gameUrl` to the appropriate URL. Ensure CORS headers allow your GitHub Pages domain to fetch the ROM.
+</Warning>

@@ -1,0 +1,290 @@
+---
+title: "EmulatorJS Events: Callbacks and Lifecycle Hooks"
+sidebarTitle: "Events"
+description: "Reference for the EmulatorJS event system — the on() method, all lifecycle events, global callback shorthands, and patterns for post-start automation."
+---
+
+`EmulatorJS` exposes a lightweight publish/subscribe system through its `on(event, func)` method. Every stage of the emulator lifecycle — from UI render to game start to save operations — publishes a named event that your code can react to. Unlike the global `EJS_ready` and `EJS_onGameStart` convenience properties, `on()` lets you register multiple independent callbacks for the same event, keep concerns separated, and attach listeners after `loader.js` has already run.
+
+Understanding the event lifecycle is essential when you need to perform actions that depend on the emulator being in a specific state — for example, loading a save state only after the game is running, or updating a page title only after the UI is ready.
+
+---
+
+## The `on(event, func)` Method
+
+```js title="Signature (from emulator.js)"
+on(event, func) {
+    if (!Array.isArray(this.functions[event])) this.functions[event] = [];
+    this.functions[event].push(func);
+}
+```
+
+<ParamField path="event" type="string" required>
+  Name of the lifecycle event to subscribe to. Case-sensitive. See the event catalogue below.
+</ParamField>
+
+<ParamField path="func" type="function" required>
+  Callback function to invoke when the event fires. May optionally receive an event-specific `data` argument (see individual event entries).
+</ParamField>
+
+`on()` pushes each callback into an array keyed by event name. There is no maximum listener count. Callbacks are invoked synchronously in registration order by `callEvent`:
+
+```js title="callEvent (from emulator.js)"
+callEvent(event, data) {
+    if (!Array.isArray(this.functions[event])) return 0;
+    this.functions[event].forEach(e => e(data));
+    return this.functions[event].length;
+}
+```
+
+The return value of `callEvent` is the number of listeners that were invoked (useful internally to check whether anything handled an event).
+
+---
+
+## Event Catalogue
+
+### `ready`
+
+**Fires when:** The emulator UI has been fully constructed and the "Start Game" button has been rendered into the DOM. This is the earliest point at which it is safe to query the emulator element.
+
+**Payload:** none
+
+The `ready` event is dispatched inside a `setTimeout(..., 20)` immediately after `createStartButton()` appends the button, giving the browser one paint cycle to lay out the element first:
+
+```js title="Ready event dispatch (from emulator.js)"
+setTimeout(() => {
+    this.callEvent("ready");
+}, 20);
+```
+
+**Global shorthand:** Set `window.EJS_ready` to a function before including `loader.js`. `loader.js` registers it as a `"ready"` listener automatically.
+
+```js
+window.EJS_ready = function() {
+    console.log("Emulator UI is ready");
+    document.getElementById("game-wrapper").style.display = "block";
+};
+```
+
+---
+
+### `start-clicked`
+
+**Fires when:** The user clicks (or taps) the "Start Game" button, immediately before the loading process begins. This is the first user interaction event.
+
+**Payload:** none
+
+```js title="start-clicked dispatch (from emulator.js)"
+startButtonClicked(e) {
+    this.callEvent("start-clicked");
+    // ...
+}
+```
+
+```js
+window.EJS_emulator.on("start-clicked", () => {
+    document.getElementById("loading-overlay").style.display = "flex";
+});
+```
+
+---
+
+### `start`
+
+**Fires when:** The WebAssembly core is fully loaded, the ROM is mounted in the virtual filesystem, and the emulation main loop has started running. This is the earliest point at which `window.EJS_emulator.gameManager` is available.
+
+**Payload:** none
+
+**Global shorthand:** Set `window.EJS_onGameStart` to a function before including `loader.js`.
+
+```js title="loader.js wires EJS_onGameStart to the start event"
+if (typeof window.EJS_onGameStart === "function") {
+    window.EJS_emulator.on("start", window.EJS_onGameStart);
+}
+```
+
+```js
+window.EJS_emulator.on("start", () => {
+    // gameManager is available from this point forward
+    const gm = window.EJS_emulator.gameManager;
+    console.log("Core:", window.EJS_emulator.getCore());
+    console.log("Supports states:", gm.supportsStates());
+});
+```
+
+---
+
+### `load`
+
+**Fires when:** A save state has been loaded (either via `quickLoad`, `loadState`, or `EJS_loadStateURL`).
+
+**Payload:** none
+
+**Global shorthand:** Set `window.EJS_onLoadState` before `loader.js`.
+
+```js
+window.EJS_emulator.on("load", () => {
+    showToast("Save state restored!");
+});
+```
+
+---
+
+### `save`
+
+**Fires when:** A save state has been written (either via `quickSave`, `getState`, or a user interaction in the UI).
+
+**Payload:** none
+
+**Global shorthand:** Set `window.EJS_onSaveState` before `loader.js`.
+
+```js
+window.EJS_emulator.on("save", () => {
+    showToast("Progress saved.");
+});
+```
+
+---
+
+## Multiple Listeners Per Event
+
+Because `on()` pushes to an array, you can register as many callbacks as you need for the same event from different parts of your codebase without one overwriting another:
+
+```js title="Multiple start listeners"
+// analytics.js
+window.EJS_emulator.on("start", () => {
+    analytics.track("game_started", { core: window.EJS_emulator.getCore() });
+});
+
+// ui.js
+window.EJS_emulator.on("start", () => {
+    document.getElementById("loading-overlay").style.display = "none";
+    document.getElementById("controls-hint").style.display = "flex";
+});
+
+// saves.js
+window.EJS_emulator.on("start", async () => {
+    const savedState = localStorage.getItem("autosave");
+    if (savedState) {
+        const bytes = Uint8Array.from(atob(savedState), c => c.charCodeAt(0));
+        window.EJS_emulator.gameManager.loadState(bytes);
+    }
+});
+```
+
+---
+
+## Lifecycle Order
+
+<Steps>
+  <Step title="Page loads, EJS_* globals are declared">
+    Your script sets `EJS_player`, `EJS_core`, `EJS_gameUrl`, and any optional globals.
+  </Step>
+  <Step title="loader.js constructs EmulatorJS">
+    `window.EJS_emulator = new EmulatorJS(EJS_player, config)` runs. The Start button is rendered. The `EJS_ready` / `EJS_onGameStart` globals are wired as `on()` listeners.
+  </Step>
+  <Step title="ready event fires (~20ms after construction)">
+    UI is visible. You can query DOM elements, adjust layout, or show the game container.
+  </Step>
+  <Step title="User clicks Start (or EJS_startOnLoaded = true)">
+    `start-clicked` fires. Core download begins. Loading text appears.
+  </Step>
+  <Step title="Core downloads, ROM mounts, emulation loop starts">
+    `start` fires. `gameManager` is now available. You can load save states, configure cheats, or begin automated testing.
+  </Step>
+  <Step title="Ongoing: load / save events">
+    Fire whenever the user (or your code) saves or restores a state.
+  </Step>
+</Steps>
+
+---
+
+## Global Callback Convenience Wrappers
+
+If you only need a single callback per event and are setting up the page statically, the global shorthand properties are the simplest approach:
+
+```js title="All four global shorthand callbacks"
+// Runs ~20ms after EmulatorJS is constructed
+window.EJS_ready = function() {
+    console.log("UI ready");
+};
+
+// Runs when the game starts running
+window.EJS_onGameStart = function() {
+    console.log("Game started");
+};
+
+// Runs when a state is loaded
+window.EJS_onLoadState = function() {
+    console.log("State loaded");
+};
+
+// Runs when a state is saved
+window.EJS_onSaveState = function() {
+    console.log("State saved");
+};
+```
+
+<Note>
+These globals must be set **before** `loader.js` executes. They are read once during the IIFE bootstrap and registered as listeners at that point. Setting them after `loader.js` has run has no effect — use `window.EJS_emulator.on()` directly instead.
+</Note>
+
+---
+
+## Complete Example: Auto-Restore Last Save
+
+```js title="Automatically restore a saved state when the game starts"
+// Declare emulator globals
+window.EJS_player    = "#game";
+window.EJS_core      = "snes";
+window.EJS_gameUrl   = "/roms/game.sfc";
+window.EJS_pathtodata = "/data/";
+
+// Register a ready callback to show the container
+window.EJS_emulator_onReady = function() {};  // placeholder
+
+// After loader.js runs, attach both events programmatically
+document.addEventListener("DOMContentLoaded", () => {
+    // loader.js is a <script defer>, so EJS_emulator exists here
+    const emu = window.EJS_emulator;
+
+    emu.on("ready", () => {
+        document.getElementById("game-wrapper").hidden = false;
+        console.log("Start button visible");
+    });
+
+    emu.on("start", async () => {
+        const gm = emu.gameManager;
+
+        // Restore an autosave if one exists in localStorage
+        const raw = localStorage.getItem("ejs_autosave");
+        if (raw && gm.supportsStates()) {
+            const bytes = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
+            gm.loadState(bytes);
+            console.log("Autosave restored");
+        }
+
+        // Save every 60 seconds
+        setInterval(async () => {
+            const state = await gm.getState();
+            if (state) {
+                const b64 = btoa(String.fromCharCode(...state));
+                localStorage.setItem("ejs_autosave", b64);
+                console.log("Autosaved at", new Date().toLocaleTimeString());
+            }
+        }, 60_000);
+    });
+
+    emu.on("save", () => {
+        showToast("State saved!");
+    });
+
+    emu.on("load", () => {
+        showToast("State loaded!");
+    });
+});
+```
+
+<Tip>
+When `EJS_startOnLoaded = true` is set, the `start-clicked` event still fires — the emulator internally calls `startButtonClicked()` on the button element, which dispatches the event before removing the button from the DOM.
+</Tip>

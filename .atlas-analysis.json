@@ -1,0 +1,128 @@
+{
+  "projectType": "saas",
+  "projectName": "EmulatorOS",
+  "projectDescription": "A browser-based gaming platform that hosts 100+ web games and retro console emulation powered by EmulatorJS, deployable as a Progressive Web App.",
+  "theme": "almond",
+  "primaryColor": "#6C63FF",
+  "lightColor": "#EDE9FF",
+  "darkColor": "#1A1333",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "pwa-install"
+            ]
+          },
+          {
+            "group": "Platform Features",
+            "pages": [
+              "features/game-library",
+              "features/emulatorjs",
+              "features/tab-cloaking",
+              "features/service-worker"
+            ]
+          },
+          {
+            "group": "Embedding & Integration",
+            "pages": [
+              "integration/embed-games",
+              "integration/emulatorjs-setup",
+              "integration/configuration"
+            ]
+          },
+          {
+            "group": "EmulatorJS API",
+            "pages": [
+              "api/emulatorjs-globals",
+              "api/game-manager",
+              "api/gamepad",
+              "api/events",
+              "api/supported-systems"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/adding-games",
+              "guides/localization",
+              "guides/cheats-shaders",
+              "guides/deployment"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "100+ browser-playable HTML5 and Flash games",
+    "In-browser retro console emulation via EmulatorJS (NES, SNES, N64, GBA, PS1, and more)",
+    "PWA support with service worker caching for offline play",
+    "Tab cloaking (custom title/favicon via localStorage)",
+    "Virtual gamepad and physical gamepad support",
+    "Save states, fast-forward, rewind, slow motion",
+    "Cheat code support and GLSL shader rendering",
+    "Experimental netplay multiplayer",
+    "Multi-language localization (15+ languages)",
+    "Google Analytics and visit counter integration"
+  ],
+  "publicApiSurface": [
+    "window.EJS_player",
+    "window.EJS_core",
+    "window.EJS_gameUrl",
+    "window.EJS_gameName",
+    "window.EJS_biosUrl",
+    "window.EJS_pathtodata",
+    "window.EJS_startOnLoaded",
+    "window.EJS_fullscreenOnLoaded",
+    "window.EJS_color",
+    "window.EJS_volume",
+    "window.EJS_defaultControls",
+    "window.EJS_cheats",
+    "window.EJS_loadStateURL",
+    "window.EJS_gamePatchUrl",
+    "window.EJS_netplayServer",
+    "window.EJS_backgroundImage",
+    "window.EJS_backgroundBlur",
+    "window.EJS_backgroundColor",
+    "window.EJS_language",
+    "window.EJS_ready",
+    "window.EJS_onGameStart",
+    "window.EJS_SHADERS",
+    "window.EJS_DEBUG_XX",
+    "window.EJS_Buttons",
+    "window.EJS_defaultOptions",
+    "window.EJS_paths",
+    "window.EJS_CacheLimit",
+    "window.EJS_gameID",
+    "window.EJS_controlScheme",
+    "EJS_GameManager.restart()",
+    "EJS_GameManager.getState()",
+    "EJS_GameManager.loadState(state)",
+    "EJS_GameManager.quickSave(slot)",
+    "EJS_GameManager.quickLoad(slot)",
+    "EJS_GameManager.screenshot()",
+    "EJS_GameManager.simulateInput(player, index, value)",
+    "EJS_GameManager.toggleFastForward(active)",
+    "EJS_GameManager.setFastForwardRatio(ratio)",
+    "EJS_GameManager.toggleRewind(active)",
+    "EJS_GameManager.toggleSlowMotion(active)",
+    "EJS_GameManager.setSlowMotionRatio(ratio)",
+    "EJS_GameManager.toggleShader(active)",
+    "EJS_GameManager.setCheat(index, enabled, code)",
+    "EJS_GameManager.resetCheat()",
+    "EJS_GameManager.getDiskCount()",
+    "EJS_GameManager.getCurrentDisk()",
+    "EJS_GameManager.setCurrentDisk(disk)",
+    "EJS_GameManager.getSaveFile()",
+    "EJS_GameManager.saveSaveFiles()",
+    "EJS_GameManager.supportsStates()",
+    "EmulatorJS.on(event, callback)",
+    "GamepadHandler"
+  ]
+}

@@ -1,0 +1,238 @@
+---
+title: "Localize EmulatorJS UI into 15+ Languages"
+sidebarTitle: "Localization"
+description: "Configure the EmulatorJS player UI for any supported locale, override translation paths, detect missing keys, and contribute new language files."
+---
+
+EmulatorJS ships with 14 translation files covering languages from Arabic to Simplified Chinese. Every string in the player UI — toolbar tooltips, menu labels, shader names, control settings headings — is looked up at runtime through a central localization function. Setting a single global variable before loading `loader.js` is all that is required to switch the entire interface to a different language.
+
+## Setting the Active Language
+
+Assign `window.EJS_language` to a locale code string **before** the `<script src="data/loader.js">` tag. Loader reads this value and fetches the corresponding JSON file from `data/localization/`.
+
+```html title="ROM page — language configuration"
+<script type="text/javascript">
+  EJS_player     = '#game';
+  EJS_core       = 'snes';
+  EJS_gameUrl    = '/gdata/my-rom.sfc';
+  EJS_pathtodata = 'data/';
+
+  // Activate Spanish (Spain) translations
+  window.EJS_language = 'es-ES';
+</script>
+<script src="data/loader.js"></script>
+```
+
+Loader handles the fetch internally:
+
+```javascript title="data/loader.js — language fetch (excerpt)"
+if (typeof window.EJS_language === "string" && window.EJS_language !== "en-US") {
+    try {
+        let path;
+        if ('undefined' != typeof EJS_paths && typeof EJS_paths[window.EJS_language] === 'string') {
+            path = EJS_paths[window.EJS_language];
+        } else {
+            path = scriptPath + "localization/" + window.EJS_language + ".json";
+        }
+        config.language = window.EJS_language;
+        config.langJson = JSON.parse(await (await fetch(path)).text());
+    } catch(e) {
+        config.langJson = {};
+    }
+}
+```
+
+If the fetch fails (network error, missing file), `config.langJson` falls back to an empty object and the UI silently uses its built-in English strings.
+
+<Note>
+  The default locale is `en-US`. If `EJS_language` is absent or set to `"en-US"`, no JSON fetch is made and English strings are used directly without any JSON overhead.
+</Note>
+
+## Available Locales
+
+The following locale codes match files in `data/localization/`:
+
+<CardGroup cols={3}>
+  <Card title="af-FR" icon="globe">Afrikaans</Card>
+  <Card title="ar-AR" icon="globe">Arabic</Card>
+  <Card title="ben-BEN" icon="globe">Bengali</Card>
+  <Card title="de-GER" icon="globe">German</Card>
+  <Card title="el-GR" icon="globe">Greek</Card>
+  <Card title="en" icon="globe">English (base template)</Card>
+  <Card title="es-ES" icon="globe">Spanish (Spain)</Card>
+  <Card title="hi-HI" icon="globe">Hindi</Card>
+  <Card title="ja-JA" icon="globe">Japanese</Card>
+  <Card title="jv-JV" icon="globe">Javanese</Card>
+  <Card title="ko-KO" icon="globe">Korean</Card>
+  <Card title="pt-BR" icon="globe">Portuguese (Brazil)</Card>
+  <Card title="ru-RU" icon="globe">Russian</Card>
+  <Card title="zh-CN" icon="globe">Simplified Chinese</Card>
+</CardGroup>
+
+Pass the code exactly as listed above to `window.EJS_language`. The filename in the `data/localization/` directory is `<code>.json`.
+
+## Localizing the Settings Panel
+
+By default the settings panel labels fall back to English regardless of `EJS_language`. To apply translations to the settings panel as well, set `window.EJS_settingsLanguage`:
+
+```html title="Enable translated settings panel"
+<script type="text/javascript">
+  EJS_player            = '#game';
+  EJS_core              = 'gba';
+  EJS_gameUrl           = '/gdata/my-rom.gba';
+  EJS_pathtodata        = 'data/';
+
+  window.EJS_language         = 'pt-BR';
+  window.EJS_settingsLanguage = true;   // translate settings panel strings
+</script>
+<script src="data/loader.js"></script>
+```
+
+Inside `EmulatorJS`, the constructor reads this flag:
+
+```javascript title="data/emulator.js — settingsLanguage flag (excerpt)"
+this.settingsLanguage = window.EJS_settingsLanguage || false;
+```
+
+When `settingsLanguage` is `true`, the `localization()` helper is called with the active `langJson` for every option label and option value rendered in the settings menu.
+
+## Overriding the Translation File Path
+
+If you host translation files on a CDN, a private server, or at a non-standard path, use `window.EJS_paths` to map the locale code to a full URL. Loader checks `EJS_paths[window.EJS_language]` before falling back to the default `data/localization/` path:
+
+```html title="Custom translation file path via EJS_paths"
+<script type="text/javascript">
+  EJS_player     = '#game';
+  EJS_core       = 'nes';
+  EJS_gameUrl    = '/gdata/my-rom.nes';
+  EJS_pathtodata = 'data/';
+
+  window.EJS_language = 'zh-CN';
+  window.EJS_paths = {
+    // Override the zh-CN translation URL
+    'zh-CN': 'https://cdn.example.com/translations/zh-CN.json',
+    // You can also override individual emulator scripts:
+    // 'emulator.min.js': 'https://cdn.example.com/emulator.min.js'
+  };
+</script>
+<script src="data/loader.js"></script>
+```
+
+The `EJS_paths` map works for any file that `loader.js` or `emulator.js` loads — core scripts, stylesheets, and localization files alike.
+
+## Detecting Missing Translations (`EJS_missingLang`)
+
+When a translation is active and the engine cannot find a string key in the loaded JSON, it logs a warning to the console and appends the missing key to `window.EJS_missingLang`:
+
+```javascript title="data/emulator.js — missing key tracking (excerpt)"
+if (!this.config.langJson[text] && log) {
+    if (!window.EJS_missingLang) window.EJS_missingLang = [];
+    window.EJS_missingLang.push(text);
+    console.log(
+        "Translation not found for '" + text +
+        "'. Language set to '" + this.config.language + "'"
+    );
+}
+```
+
+After the emulator has loaded, inspect `window.EJS_missingLang` in the browser console to identify every string your translation file still needs:
+
+```javascript title="Browser console — check missing translations"
+// After the game loads:
+console.log(window.EJS_missingLang);
+// Example output: ["Rewind", "Screen Record", "Slow Motion"]
+```
+
+Use this array as a checklist when completing a partial translation.
+
+## Localization JSON Structure
+
+Every translation file mirrors the structure of `en.json`. Below is an annotated excerpt showing the two main sections:
+
+```json title="data/localization/es-ES.json (excerpt)"
+{
+    "i18n": {
+        "restart":          "Restart",
+        "play":             "Jugar",
+        "pause":            "Pausa",
+        "volume":           "Volumen",
+        "mute":             "Silencio (F9)",
+        "unmute":           "Activar (F9)",
+        "enterFullscreen":  "Pantalla completa",
+        "exitFullscreen":   "Salir de pantalla completa",
+        "settings":         "Ajustes",
+        "saveState":        "Guardar Estado (Shift + F2)",
+        "loadState":        "Cargar Estado (Shift + F4)",
+        "screenRecord":     "Comenzar gravacion de pantalla",
+        "netplay":          "Netplay",
+        "gamepad":          "Ajustes de control",
+        "cheat":            "Trampas",
+        "menuBack":         "Volver al menú anterior",
+        "playNow":          "Jugar ahora"
+    },
+    "normalOptions": {
+        "shader": {
+            "label": "Sombreador",
+            "options": {
+                "disabled":            "Discapacitado",
+                "2xScaleHQ.glslp":     "2xScaleHQ",
+                "crt-easymode.glslp":  "CRT easymode",
+                "crt-aperture.glslp":  "CRT aperture",
+                "crt-geom.glslp":      "CRT geom",
+                "crt-mattias.glslp":   "CRT mattias"
+            },
+            "default": "disabled"
+        },
+        "virtual-gamepad": {
+            "label": "Gamepad Virtual",
+            "options": {
+                "disabled": "Desactivar",
+                "enabled":  "Activar"
+            },
+            "default": "enabled"
+        }
+    },
+    "Control Settings": "Ajustes de control",
+    "Player 1": "Jugador 1",
+    "Reset":    "Reset",
+    "Close":    "Cerrar"
+}
+```
+
+The `i18n` object holds toolbar and menu action strings. The `normalOptions` object translates settings panel option labels and their enumerated values. Top-level string keys (outside `i18n` and `normalOptions`) cover dialog headings and miscellaneous labels.
+
+## Adding a New Language
+
+<Steps>
+  ### Copy `en.json` as your starting template
+
+  ```bash
+  cp data/localization/en.json data/localization/xx-XX.json
+  ```
+
+  Use a [BCP 47](https://www.iana.org/assignments/language-subtag-registry/language-subtag-registry)-style code matching the convention used by existing files (e.g., `fr-FR`, `it-IT`).
+
+  ### Translate every value
+
+  Work through all keys in `i18n`, `normalOptions`, and the top-level string keys. The base `en.json` prefixes untranslated values with a `-` dash as a placeholder — replace every `-Prefixed String` with the correct translation.
+
+  ### Test with `EJS_missingLang`
+
+  Set `window.EJS_language` to your new code and load any ROM page. Open the browser console after the emulator starts and check:
+
+  ```javascript
+  console.log(window.EJS_missingLang); // should be undefined or []
+  ```
+
+  ### Commit the file
+
+  Add `data/localization/xx-XX.json` to the repository and push to `main`. The GitHub Pages workflow deploys it automatically.
+
+  ### Document the new locale
+
+  Open `data/localization/readme.md` and add your language to the list so other contributors know it exists.
+</Steps>
+
+<Warning>
+  Translation files are fetched at runtime over the network. Any JSON syntax error (trailing comma, unescaped special character) will cause the fetch parse step to throw, and the emulator will silently fall back to English. Always validate your JSON before committing.
+</Warning>

@@ -1,47 +1,193 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get Started with EmulatorOS in 5 Minutes"
+sidebarTitle: "Quickstart"
+description: "Fork the repo, spin up a local server, drop in a ROM file, and have a retro game running in your browser in under five minutes."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+EmulatorOS requires no build tools and no package manager. The entire platform is plain HTML, CSS, and JavaScript served as static files. Getting from zero to a running game takes one command and a ROM file — the steps below walk through every decision point, from cloning the repo to wiring up the EmulatorJS globals for a custom game page.
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
 
-    ```bash
-    npm install your-package
-    ```
-  </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+### Fork and Clone the Repository
 
-    ```bash
-    your-cli init
-    ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+Open [github.com/dih722721-pixel/webthings](https://github.com/dih722721-pixel/webthings) and click **Fork** to create your own copy, then clone it locally:
 
-    ```bash
-    your-cli start
+```bash title="Clone your fork"
+git clone https://github.com/<your-username>/webthings.git
+cd webthings
+```
+
+The repository is entirely self-contained — all emulator cores, scripts, and assets are committed. No `npm install` or build step is needed.
+
+### Start a Local HTTP Server
+
+Open the project root in a local HTTP server. A plain `file://` path will not work because service workers and the Fetch API require an HTTP origin. Use any of the following:
+
+<Tabs>
+  <Tab title="npx serve">
+    ```bash title="Serve with npx"
+    npx serve .
     ```
-  </Step>
-</Steps>
+    Starts a server at `http://localhost:3000` (or the next available port). Requires Node.js.
+  </Tab>
+  <Tab title="Python 3">
+    ```bash title="Serve with Python 3"
+    python3 -m http.server 8080
+    ```
+    Opens at `http://localhost:8080`. Available on any machine with Python 3 installed.
+  </Tab>
+  <Tab title="Python 2">
+    ```bash title="Serve with Python 2"
+    python -m SimpleHTTPServer 8080
+    ```
+    Use this on older systems where only Python 2 is present.
+  </Tab>
+</Tabs>
+
+<Warning>
+  Always use `localhost` or HTTPS in production. The service worker registration in `sw-loader.js` and the PWA install prompt both silently fail over plain HTTP on a non-localhost origin.
+</Warning>
+
+### Load a ROM via the Drag-and-Drop Page
+
+Navigate to `http://localhost:3000/emulatorjs.html`. You'll see a centered drop zone that reads **"Drag ROM file or click here"**.
+
+Drop or select any supported ROM file. If the file extension is unambiguous (e.g., `.nes`, `.gba`, `.nds`, `.gb`, `.z64`, `.n64`), the core is selected automatically. For any other extension, a dropdown appears listing all supported systems:
+
+| System | Core value |
+|---|---|
+| Nintendo Entertainment System | `nes` |
+| Super Nintendo | `snes` |
+| Nintendo 64 | `n64` |
+| Game Boy / GBC | `gb` |
+| Game Boy Advance | `gba` |
+| Nintendo DS | `nds` |
+| PlayStation | `psx` |
+| Sega Mega Drive | `segaMD` |
+| Sega Master System | `segaMS` |
+| Sega CD | `segaCD` |
+| Sega Game Gear | `segaGG` |
+| Sega Saturn | `segaSaturn` |
+| Sega 32X | `sega32x` |
+| Atari 2600 | `atari2600` |
+| Atari 7800 | `atari7800` |
+| Atari Jaguar | `jaguar` |
+| Atari Lynx | `lynx` |
+| Virtual Boy | `vb` |
+
+Click **Load game** and the emulator boots immediately inside the same page — no navigation, no reload.
 
 <Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
-
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
+  The drag-and-drop page creates an object URL from the file with `URL.createObjectURL()`, so the ROM never leaves your device. No data is uploaded anywhere.
 </Tip>
+
+### Create a Custom Hosted Game Page
+
+To host a specific ROM permanently (rather than using the drag-and-drop loader), create a dedicated HTML page. Copy the pattern below, which mirrors exactly how `emulatorjs.html` sets up the engine at runtime:
+
+```html title="my-game.html"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Game — EmulatorOS</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #222; }
+    #display { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="display">
+    <div id="game"></div>
+  </div>
+
+  <script>
+    // ── EmulatorJS configuration globals ──────────────────────────
+    window.EJS_player      = "#game";          // CSS selector for the mount element
+    window.EJS_core        = "snes";           // Console system (see table in Step 3)
+    window.EJS_gameUrl     = "/roms/my-game.smc"; // Path or URL to the ROM file
+    window.EJS_gameName    = "My Game";        // Displayed in the emulator UI
+    window.EJS_pathtodata  = "data/";          // Path to the EmulatorJS data/ directory
+    window.EJS_startOnLoaded = true;           // Auto-start when ROM finishes loading
+  </script>
+
+  <!-- loader.js reads the globals above and boots the emulator -->
+  <script src="data/loader.js"></script>
+</body>
+</html>
+```
+
+Place your ROM at the path referenced by `EJS_gameUrl` (relative to the server root), then open `my-game.html` in the browser.
+
+### Embed a Game Inside an Existing Page
+
+For integration into a larger site — like the built-in game pages that use `retro.html` as their pattern — embed the emulator in an `<iframe>` so it runs in an isolated browsing context:
+
+```html title="game-page.html"
+<!-- The iframe src points to your dedicated emulator page -->
+<iframe
+  src="/my-game.html"
+  allowfullscreen
+  scrolling="no"
+  style="width: 100%; height: 506px; border: none;"
+></iframe>
+```
+
+<Info>
+  The `allowfullscreen` attribute is required for the emulator's built-in fullscreen button to work. Without it, the Fullscreen API call throws a permissions error and the button has no effect.
+</Info>
+
+</Steps>
+
+## Complete EJS_* Configuration Reference
+
+`loader.js` maps every `window.EJS_*` global to the internal `config` object passed to `new EmulatorJS(player, config)`. The table below covers all globals read by the loader:
+
+<AccordionGroup>
+  <Accordion title="Required globals">
+
+| Global | Type | Description |
+|---|---|---|
+| `EJS_player` | `string` | CSS selector for the DOM element that will contain the emulator canvas. |
+| `EJS_core` | `string` | The console system to emulate (e.g., `"snes"`, `"gba"`, `"psx"`). |
+| `EJS_gameUrl` | `string` | URL or path to the ROM file. Accepts object URLs from `URL.createObjectURL()`. |
+| `EJS_pathtodata` | `string` | Path to the `data/` directory — used to resolve core `.data` files and assets. |
+
+  </Accordion>
+  <Accordion title="Common optional globals">
+
+| Global | Type | Description |
+|---|---|---|
+| `EJS_gameName` | `string` | Game title shown in the emulator toolbar and save state UI. |
+| `EJS_startOnLoaded` | `boolean` | When `true`, the emulator starts automatically without a "Play" button click. |
+| `EJS_fullscreenOnLoaded` | `boolean` | Enters fullscreen immediately after the ROM loads. |
+| `EJS_biosUrl` | `string` | URL to a BIOS file — required for systems such as PlayStation and Sega CD. |
+| `EJS_volume` | `number` | Initial volume from `0` (muted) to `1` (full). |
+| `EJS_color` | `string` | Accent color for the emulator UI (hex string, e.g., `"#3388ff"`). |
+| `EJS_language` | `string` | Locale code for the UI (e.g., `"es-ES"`, `"ja-JA"`, `"zh-CN"`). |
+| `EJS_loadStateURL` | `string` | URL to a save-state file to load on startup. |
+| `EJS_cheats` | `array` | Array of cheat code objects to activate at launch. |
+| `EJS_defaultControls` | `object` | Override the default controller key bindings. |
+| `EJS_backgroundImage` | `string` | URL to a background image displayed behind the canvas. |
+| `EJS_backgroundBlur` | `boolean` | Blurs the background image when `true`. |
+| `EJS_backgroundColor` | `string` | Background fill color behind the canvas. |
+
+  </Accordion>
+  <Accordion title="Netplay & ad globals">
+
+| Global | Type | Description |
+|---|---|---|
+| `EJS_netplayServer` | `string` | WebSocket URL for the optional netplay server. |
+| `EJS_gameID` | `number` | Numeric game ID used by the netplay matchmaking server. |
+| `EJS_AdUrl` | `string` | URL of the ad to display in the pre-game ad slot. |
+| `EJS_AdMode` | `string` | Ad display mode (`"0"` = disabled). |
+| `EJS_AdTimer` | `number` | Seconds the ad plays before the skip button appears. |
+| `EJS_AdSize` | `array` | `[width, height]` dimensions for the ad container. |
+
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  `loader.js` resolves `EJS_pathtodata` at script-load time. If you omit it, the loader falls back to inferring the data path from `document.currentScript.src` — which works when `loader.js` is in `data/` and you reference it as `data/loader.js`, but will break if the script is loaded from a CDN or renamed path.
+</Note>

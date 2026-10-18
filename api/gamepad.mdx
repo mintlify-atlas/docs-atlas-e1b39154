@@ -1,0 +1,327 @@
+---
+title: "GamepadHandler: Physical Controller API Reference"
+sidebarTitle: "GamepadHandler"
+description: "Reference for the GamepadHandler class — polling navigator.getGamepads(), firing button and axis events, configuring dead zones, and terminating the polling loop."
+---
+
+`GamepadHandler` is a self-contained polling class that wraps the browser's [Gamepad API](https://developer.mozilla.org/en-US/docs/Web/API/Gamepad_API) in a simple event-driven interface. Instead of relying on the browser's `gamepadconnected`/`gamepaddisconnected` DOM events — which have inconsistent cross-browser support — `GamepadHandler` calls `navigator.getGamepads()` on a 10 ms interval and computes diffs between the previous and current states to fire precise `buttondown`, `buttonup`, and `axischanged` events. The class is exported to `window.GamepadHandler` and is instantiated internally by `EmulatorJS` for its input mapping system.
+
+<Note>
+You do not need to instantiate `GamepadHandler` yourself when working within EmulatorOS; the emulator manages its own instance. This reference is useful if you are building custom input overlays, remapping tools, or standalone pages that need gamepad support outside the emulator context.
+</Note>
+
+---
+
+## Constructor
+
+```js title="Instantiate and begin polling"
+const handler = new GamepadHandler();
+// Polling begins immediately — every 10 ms
+```
+
+The constructor initialises three internal properties and starts the polling loop:
+
+| Property | Type | Description |
+|---|---|---|
+| `gamepads` | `Array` | Snapshot of connected gamepads from the previous poll cycle |
+| `listeners` | `Object` | Map of event name → registered callback function |
+| `timeout` | `number \| null` | Handle returned by `setTimeout` for the current poll tick |
+
+---
+
+## Polling Loop
+
+`GamepadHandler` uses a recursive `setTimeout`-based loop rather than `requestAnimationFrame`. This means input events fire regardless of whether the page is visible, and the interval is consistently ~10 ms across all browsers.
+
+```js title="Internal loop (from gamepad.js)"
+loop() {
+    this.updateGamepadState();
+    this.timeout = setTimeout(this.loop.bind(this), 10);
+}
+```
+
+On each tick, `updateGamepadState()` calls the appropriate getter:
+
+```js
+getGamepads() {
+    return navigator.getGamepads
+        ? navigator.getGamepads()
+        : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads() : []);
+}
+```
+
+The `webkitGetGamepads` fallback provides compatibility with older WebKit builds.
+
+---
+
+## Dead Zone
+
+Analogue stick values between **-0.01 and +0.01** are normalised to exactly `0` before comparison. This prevents constant `axischanged` floods from stick drift or resting noise in cheap controllers.
+
+```js title="Dead zone logic (from gamepad.js)"
+const val    = (axis < 0.01 && axis > -0.01) ? 0 : axis;
+const newVal = (gamepad.axes[axisIndex] < 0.01 && gamepad.axes[axisIndex] > -0.01)
+               ? 0 : gamepad.axes[axisIndex];
+```
+
+---
+
+## Event System
+
+`GamepadHandler` uses a single-listener-per-event model backed by a plain object. Register a listener with `on(name, cb)`. Listeners are stored in `this.listeners[name]` and dispatched synchronously on the polling tick where the state change is detected.
+
+### `on(name, cb)`
+
+Registers a callback for the given event. Only one callback per event name is supported — calling `on` again for the same name overwrites the previous listener.
+
+<ParamField path="name" type="string" required>
+  Event name, case-insensitively lowercased before storage. One of: `"connected"`, `"disconnected"`, `"buttondown"`, `"buttonup"`, `"axischanged"`.
+</ParamField>
+
+<ParamField path="cb" type="function" required>
+  Callback function receiving an event object (see event payloads below).
+</ParamField>
+
+```js
+const handler = new GamepadHandler();
+
+handler.on("connected", (e) => {
+    console.log("Gamepad connected at index", e.gamepadIndex);
+});
+```
+
+### `dispatchEvent(name, arg)`
+
+Internal method that looks up `this.listeners[name]` and calls it with `arg` after injecting a `type` property. Not intended for external use, but documented here for completeness.
+
+```js title="dispatchEvent (from gamepad.js)"
+dispatchEvent(name, arg) {
+    if (typeof this.listeners[name] !== 'function') return;
+    if (!arg) arg = {};
+    arg.type = name;
+    this.listeners[name](arg);
+}
+```
+
+---
+
+## Events
+
+### `connected`
+
+Fires when a previously unseen gamepad index appears in the `getGamepads()` result.
+
+**Payload:**
+
+<ParamField path="gamepadIndex" type="number">
+  The `index` property of the newly connected `Gamepad` object.
+</ParamField>
+
+<ParamField path="type" type="string">
+  Always `"connected"`.
+</ParamField>
+
+```js
+handler.on("connected", (e) => {
+    console.log(`Gamepad #${e.gamepadIndex} connected`);
+});
+```
+
+---
+
+### `disconnected`
+
+Fires when a gamepad index that was previously present disappears from the `getGamepads()` result.
+
+**Payload:**
+
+<ParamField path="gamepadIndex" type="number">
+  The `index` of the disconnected gamepad.
+</ParamField>
+
+<ParamField path="type" type="string">
+  Always `"disconnected"`.
+</ParamField>
+
+---
+
+### `buttondown`
+
+Fires when a button transitions from not-pressed to pressed.
+
+**Payload:**
+
+<ParamField path="index" type="number">
+  Zero-based button index on the gamepad (matches the standard [W3C Gamepad mapping](https://www.w3.org/TR/gamepad/#remapping)).
+</ParamField>
+
+<ParamField path="gamepadIndex" type="number">
+  Index of the gamepad that produced the event.
+</ParamField>
+
+<ParamField path="type" type="string">
+  Always `"buttondown"`.
+</ParamField>
+
+```js
+handler.on("buttondown", (e) => {
+    console.log(`Button ${e.index} pressed on gamepad ${e.gamepadIndex}`);
+});
+```
+
+---
+
+### `buttonup`
+
+Fires when a button transitions from pressed to not-pressed.
+
+**Payload:**
+
+<ParamField path="index" type="number">
+  Zero-based button index on the gamepad.
+</ParamField>
+
+<ParamField path="gamepadIndex" type="number">
+  Index of the gamepad that produced the event.
+</ParamField>
+
+<ParamField path="type" type="string">
+  Always `"buttonup"`.
+</ParamField>
+
+---
+
+### `axischanged`
+
+Fires when an analogue axis value changes (after dead-zone normalisation). Only the four named axes are dispatched; unnamed axes (index ≥ 4) are silently ignored.
+
+**Payload:**
+
+<ParamField path="axis" type="string">
+  Named axis identifier. One of: `"LEFT_STICK_X"`, `"LEFT_STICK_Y"`, `"RIGHT_STICK_X"`, `"RIGHT_STICK_Y"`.
+</ParamField>
+
+<ParamField path="value" type="number">
+  New axis value in the range `-1.0` to `1.0` (or `0` if within the dead zone).
+</ParamField>
+
+<ParamField path="index" type="number">
+  The gamepad's `index` property (same as `gamepadIndex`; both are present for API symmetry).
+</ParamField>
+
+<ParamField path="gamepadIndex" type="number">
+  Index of the gamepad that produced the event.
+</ParamField>
+
+<ParamField path="type" type="string">
+  Always `"axischanged"`.
+</ParamField>
+
+```js title="Axis names from gamepad.js"
+// Index 0 → LEFT_STICK_X
+// Index 1 → LEFT_STICK_Y
+// Index 2 → RIGHT_STICK_X
+// Index 3 → RIGHT_STICK_Y
+const axis = ['LEFT_STICK_X', 'LEFT_STICK_Y', 'RIGHT_STICK_X', 'RIGHT_STICK_Y'][axisIndex];
+```
+
+```js
+handler.on("axischanged", (e) => {
+    if (e.axis === "LEFT_STICK_X") {
+        console.log(`Left stick X: ${e.value.toFixed(3)}`);
+    }
+});
+```
+
+---
+
+## `terminate()`
+
+Cancels the pending `setTimeout` and stops the polling loop permanently. After calling `terminate()`, no further events will fire. Call this when unmounting a component or navigating away to prevent memory leaks.
+
+```js
+const handler = new GamepadHandler();
+
+// ... use handler ...
+
+// When done
+handler.terminate();
+```
+
+<Warning>
+`GamepadHandler` does not automatically clean up when the page unloads. If you instantiate it manually (e.g. outside the emulator), always call `terminate()` in a `beforeunload` listener or equivalent teardown hook.
+</Warning>
+
+---
+
+## Full Usage Example
+
+```js title="Complete GamepadHandler integration"
+const handler = new GamepadHandler();
+
+handler.on("connected", (e) => {
+    console.log(`🎮 Gamepad connected: index ${e.gamepadIndex}`);
+});
+
+handler.on("disconnected", (e) => {
+    console.warn(`🎮 Gamepad disconnected: index ${e.gamepadIndex}`);
+});
+
+handler.on("buttondown", (e) => {
+    // Standard mapping: 0=A, 1=B, 2=X, 3=Y, 9=Start
+    if (e.index === 9) {
+        console.log("Start pressed — pause emulation");
+        window.EJS_emulator?.gameManager.toggleMainLoop(0);
+    }
+});
+
+handler.on("buttonup", (e) => {
+    if (e.index === 9) {
+        window.EJS_emulator?.gameManager.toggleMainLoop(1);
+    }
+});
+
+handler.on("axischanged", (e) => {
+    const { axis, value, gamepadIndex } = e;
+    if (Math.abs(value) > 0.1) {
+        console.log(`Gamepad ${gamepadIndex} — ${axis}: ${value.toFixed(3)}`);
+    }
+});
+
+// Stop polling when the page is hidden
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+        handler.terminate();
+    }
+});
+```
+
+---
+
+## Button Index Reference (Standard Mapping)
+
+The following indices correspond to the [W3C Standard Gamepad mapping](https://www.w3.org/TR/gamepad/#remapping) used by most modern controllers when mapped by the browser:
+
+| Index | Button |
+|-------|--------|
+| 0 | A (South) |
+| 1 | B (East) |
+| 2 | X (West) |
+| 3 | Y (North) |
+| 4 | L1 (Left Bumper) |
+| 5 | R1 (Right Bumper) |
+| 6 | L2 (Left Trigger) |
+| 7 | R2 (Right Trigger) |
+| 8 | Select / Back |
+| 9 | Start |
+| 10 | Left Stick Click |
+| 11 | Right Stick Click |
+| 12 | D-Pad Up |
+| 13 | D-Pad Down |
+| 14 | D-Pad Left |
+| 15 | D-Pad Right |
+| 16 | Home / Guide |
+
+<Tip>
+Actual button indices depend on the OS, browser, and controller. Some controllers expose additional buttons or use a non-standard mapping. Always test with the hardware you intend to support.
+</Tip>

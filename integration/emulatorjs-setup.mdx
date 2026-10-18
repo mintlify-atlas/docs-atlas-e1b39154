@@ -1,0 +1,386 @@
+---
+title: "Set Up EmulatorJS for ROM Emulation on Your Site"
+sidebarTitle: "EmulatorJS Setup"
+description: "Host the EmulatorJS engine, wire EJS_* globals, pick the right core for each console, and run ROMs in-browser — with drag-and-drop loader walkthrough."
+---
+
+EmulatorJS is a WebAssembly-based retro console emulation engine that runs entirely in the browser. Each emulated system is provided by a separate Libretro core compiled to WASM; the correct core is selected at runtime via the `EJS_core` global. To embed ROM emulation in a page, you host the `data/` directory alongside your HTML, declare a handful of configuration globals, and load a single bootstrap script — `loader.js` — which handles script/style injection and engine initialisation automatically.
+
+<Steps>
+
+### Host the `data/` Directory
+
+Copy the entire `data/` directory from the EmulatorOS repository to your web server so it is reachable relative to your HTML pages. The directory must contain at minimum:
+
+| File | Purpose |
+|---|---|
+| `loader.js` | Bootstrap script — the only file you reference directly |
+| `emulator.min.js` | Minified EmulatorJS engine (production) |
+| `emulator.min.css` | Engine stylesheet (production) |
+| `cores/` | WASM core `.data` files, one per emulated system |
+
+In debug mode (`EJS_DEBUG_XX = true`) the loader instead fetches the unminified sources — `emulator.js`, `nipplejs.js`, `shaders.js`, `storage.js`, `gamepad.js`, `GameManager.js`, and `socket.io.min.js` — plus `emulator.css`. All of these must also be present in `data/` when developing.
+
+<Tip>
+Set `EJS_pathtodata` to the URL path where `data/` lives (e.g. `"data/"` for a same-directory deployment or `"/assets/emulatorjs/data/"` for a shared CDN path). If you omit it, the loader infers the path from its own `script.src` URL.
+</Tip>
+
+### Create a Container Element
+
+Add a `<div>` with a unique `id` to the page. The EmulatorJS engine mounts its entire UI — canvas, toolbar, settings panel — inside this element.
+
+```html title="Container element"
+<div class="emscripten" style="width: 860px; height: 480px; max-width: 100%;">
+  <div id="game"></div>
+</div>
+```
+
+The outer sizing wrapper is optional but recommended: it constrains the emulator to a fixed aspect ratio. The engine fills 100 % of its parent, so the container dimensions control the rendered size.
+
+### Declare Required EJS_* Globals
+
+Before loading `loader.js`, set four required globals as `window` properties. All four must be defined; omitting any one will prevent the engine from starting.
+
+```html title="Required configuration globals"
+<script type="text/javascript">
+  // CSS selector matching the container div
+  EJS_player = '#game';
+
+  // System core identifier (see core table below)
+  EJS_core = 'gba';
+
+  // URL to the ROM file (relative, absolute, or blob: URL)
+  EJS_gameUrl = '/gdata/Pokemon - FireRed Version (USA, Europe) (Rev 1).gba';
+
+  // Path to the data/ directory — must end with /
+  EJS_pathtodata = 'data/';
+</script>
+```
+
+<Note>
+All `EJS_*` variables are assigned directly on `window` without `var`/`let`/`const`. This is intentional — `loader.js` reads them as `window.EJS_*` properties.
+</Note>
+
+### Load `loader.js`
+
+Place the `<script>` tag for `loader.js` **after** the globals block and still inside `<body>`. The loader is an async IIFE; it will fetch and inject all additional scripts and styles, then instantiate the `EmulatorJS` class.
+
+```html title="Bootstrap script tag"
+<script src="data/loader.js"></script>
+```
+
+Once the script executes, the emulator UI appears inside your container element and begins downloading the selected core. The global `window.EJS_emulator` is set to the live `EmulatorJS` instance once the loader completes, allowing you to call its API from your own scripts.
+
+### Configure Optional Settings
+
+After the four required globals you can add any number of optional `EJS_*` globals to customise behaviour. The most commonly used options for a new ROM page are:
+
+```html title="Common optional globals"
+<script type="text/javascript">
+  EJS_player      = '#game';
+  EJS_core        = 'n64';
+  EJS_gameUrl     = '/gdata/Mario Kart 64 (USA).z64';
+  EJS_pathtodata  = 'data/';
+
+  // Display name shown in the emulator toolbar
+  EJS_gameName    = 'Mario Kart 64';
+
+  // Numeric ID used for netplay room matching
+  EJS_gameID      = 14;
+
+  // Start emulation immediately without requiring a click
+  EJS_startOnLoaded = true;
+
+  // Initial audio volume: 0.0 (muted) – 1.0 (full)
+  EJS_volume      = 0.5;
+
+  // Path to BIOS file — required for PSX, Sega CD, etc.
+  EJS_biosUrl     = '';
+
+  // UI accent colour (hex)
+  EJS_color       = '#1a73e8';
+</script>
+```
+
+See the [Configuration Reference](/integration/configuration) for the complete list of every available global.
+
+</Steps>
+
+## Core Selection Reference
+
+`EJS_core` maps a human-readable system identifier to the correct Libretro WASM core. The table below lists every supported value and the underlying core file that ships in `data/cores/`.
+
+<Tabs>
+  <Tab title="Nintendo">
+
+| `EJS_core` value | System | Core file |
+|---|---|---|
+| `nes` | Nintendo Entertainment System | `fceumm-wasm.data` |
+| `snes` | Super Nintendo Entertainment System | `snes9x-wasm.data` |
+| `n64` | Nintendo 64 | `mupen64plus_next-wasm.data` |
+| `gba` | Game Boy Advance | `mgba-wasm.data` |
+| `gb` | Game Boy / Game Boy Color | `gambatte-wasm.data` |
+| `nds` | Nintendo DS | `melonds-wasm.data` |
+| `vb` | Virtual Boy | `beetle_vb-wasm.data` |
+
+<Note>
+On Safari for iOS, `n64` automatically falls back to `parallel_n64` (`parallel_n64-wasm.data`) for better compatibility.
+</Note>
+
+  </Tab>
+  <Tab title="Sega">
+
+| `EJS_core` value | System | Core file |
+|---|---|---|
+| `segaMD` | Sega Mega Drive / Genesis | `genesis_plus_gx-wasm.data` |
+| `segaMS` | Sega Master System | `genesis_plus_gx-wasm.data` |
+| `segaGG` | Sega Game Gear | `genesis_plus_gx-wasm.data` |
+| `segaCD` | Sega CD / Mega-CD | `genesis_plus_gx-wasm.data` |
+| `sega32x` | Sega 32X | `picodrive-wasm.data` |
+| `segaSaturn` | Sega Saturn | `yabause-wasm.data` |
+| `sega` | Generic Sega (alias) | `genesis_plus_gx-wasm.data` |
+
+  </Tab>
+  <Tab title="Atari & Others">
+
+| `EJS_core` value | System | Core file |
+|---|---|---|
+| `atari2600` | Atari 2600 | `stella2014-wasm.data` |
+| `atari7800` | Atari 7800 | `prosystem-wasm.data` |
+| `atari5200` | Atari 5200 | `a5200-wasm.data` |
+| `lynx` | Atari Lynx | `handy-wasm.data` |
+| `jaguar` | Atari Jaguar | `virtualjaguar-wasm.data` |
+| `psx` | Sony PlayStation | `pcsx_rearmed-wasm.data` |
+| `psp` | Sony PSP | `ppsspp-wasm.data` |
+| `3do` | 3DO | `opera-wasm.data` |
+| `arcade` | Arcade (FBNeo) | `fbneo-wasm.data` |
+| `mame2003` | MAME 2003 | `mame2003-wasm.data` |
+
+  </Tab>
+</Tabs>
+
+<Warning>
+Some cores require a BIOS file to function. PlayStation (`psx`) requires a PSX BIOS; Sega CD (`segaCD`) requires the Sega CD BIOS. Set `EJS_biosUrl` to the URL of the appropriate BIOS file before loading `loader.js`. Distributing BIOS files may have legal implications — verify your rights before hosting them.
+</Warning>
+
+## ROM File Format Reference
+
+Each core accepts specific ROM file extensions. The table below lists accepted formats per core as defined in `emulator.js`:
+
+<Accordion title="ROM extensions by core">
+
+| Core (`EJS_core`) | Accepted Extensions |
+|---|---|
+| `nes` | `.fds`, `.nes`, `.unif`, `.unf` |
+| `snes` | `.smc`, `.sfc`, `.swc`, `.fig`, `.bs`, `.st` |
+| `n64` | `.n64`, `.v64`, `.z64`, `.bin`, `.u1`, `.ndd`, `.gb` |
+| `gba` | `.gb`, `.gbc`, `.gba` |
+| `gb` | `.gb`, `.gbc`, `.dmg` |
+| `nds` | `.nds` |
+| `vb` | `.vb`, `.vboy`, `.bin` |
+| `psx` | `.bin`, `.cue`, `.img`, `.mdf`, `.pbp`, `.toc`, `.cbn`, `.m3u`, `.ccd` |
+| `psp` | `.elf`, `.iso`, `.cso`, `.prx`, `.pbp` |
+| `segaMD` / `segaMS` / `segaGG` / `segaCD` / `sega` | `.m3u`, `.mdx`, `.md`, `.smd`, `.gen`, `.bin`, `.cue`, `.iso`, `.chd`, `.sms`, `.gg`, `.sg` |
+| `sega32x` | `.bin`, `.gen`, `.smd`, `.md`, `.32x`, `.cue`, `.iso`, `.sms`, `.68k`, `.chd` |
+| `segaSaturn` | `.cue`, `.iso`, `.ccd`, `.mds`, `.chd`, `.zip`, `.m3u` |
+| `atari2600` | `.a26`, `.bin`, `.zip` |
+| `atari7800` | `.a78`, `.bin` |
+| `atari5200` | `.a52`, `.bin` |
+| `lynx` | `.lnx` |
+| `jaguar` | `.j64`, `.jag`, `.rom`, `.abs`, `.cof`, `.bin`, `.prg` |
+| `3do` | `.iso`, `.bin`, `.chd`, `.cue` |
+| `arcade` | `.zip`, `.7z` |
+| `mame2003` | `.zip` |
+
+</Accordion>
+
+## Drag-and-Drop ROM Loader
+
+The `emulatorjs.html` page in the repository demonstrates a drag-and-drop approach: the user drops (or clicks to browse) a ROM file directly onto the page, the extension is inspected to auto-detect the core, and if detection is ambiguous a `<select>` lets the user pick the system. The ROM is converted to a `blob:` URL and passed as `EJS_gameUrl`.
+
+```html title="emulatorjs.html — drag-and-drop ROM loader"
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>EmulatorJS</title>
+    <link rel="icon" href="/docs/Logo.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- (styling omitted for brevity — see emulatorjs.html in the repo) -->
+  </head>
+  <body>
+    <!-- Drop target shown before a ROM is selected -->
+    <div id="box">
+      <input type="file" id="input">
+      Drag ROM file or click here
+    </div>
+
+    <script>
+      input.onchange = async () => {
+        // Convert the File to a blob: URL for EJS_gameUrl
+        const url = URL.createObjectURL(new Blob([input.files[0]]));
+        const parts = input.files[0].name.split(".");
+
+        // Auto-detect core from file extension
+        const core = await (async (ext) => {
+          if (["fds", "nes", "unif", "unf"].includes(ext)) return "nes";
+          if (["smc", "fig", "sfc", "gd3", "gd7", "dx2", "bsx", "swc"].includes(ext)) return "snes";
+          if (["z64", "n64"].includes(ext)) return "n64";
+          if (["nds", "gba", "gb"].includes(ext)) return ext;
+
+          // Ambiguous extension — show a select menu
+          return await new Promise(resolve => {
+            const cores = {
+              "Nintendo 64": "n64", "Nintendo Game Boy": "gb",
+              "Nintendo Game Boy Advance": "gba", "Nintendo DS": "nds",
+              "Nintendo Entertainment System": "nes",
+              "Super Nintendo Entertainment System": "snes",
+              "PlayStation": "psx", "Virtual Boy": "vb",
+              "Sega Mega Drive": "segaMD", "Sega Master System": "segaMS",
+              "Sega CD": "segaCD", "Atari Lynx": "lynx",
+              "Sega 32X": "sega32x", "Atari Jaguar": "jaguar",
+              "Sega Game Gear": "segaGG", "Sega Saturn": "segaSaturn",
+              "Atari 7800": "atari7800", "Atari 2600": "atari2600"
+            };
+            const button = document.createElement("button");
+            const select = document.createElement("select");
+            for (const type in cores) {
+              const option = document.createElement("option");
+              option.value = cores[type];
+              option.textContent = type;
+              select.appendChild(option);
+            }
+            button.onclick = () => resolve(select[select.selectedIndex].value);
+            button.textContent = "Load game";
+            box.innerHTML = "";
+            box.appendChild(select);
+            box.appendChild(button);
+          });
+        })(parts.pop());
+
+        // Mount the emulator
+        const div = document.createElement("div");
+        const sub = document.createElement("div");
+        const script = document.createElement("script");
+        sub.id = "game";
+        div.id = "display";
+        box.remove();
+        div.appendChild(sub);
+        document.body.appendChild(div);
+
+        window.EJS_player       = "#game";
+        window.EJS_gameName     = parts.shift();
+        window.EJS_biosUrl      = "";
+        window.EJS_gameUrl      = url;         // blob: URL from FileReader
+        window.EJS_core         = core;
+        window.EJS_pathtodata   = "data/";
+        window.EJS_startOnLoaded = true;
+
+        script.src = "data/loader.js";
+        document.body.appendChild(script);
+      };
+
+      box.ondragover = () => box.setAttribute("drag", true);
+      box.ondragleave = () => box.removeAttribute("drag");
+    </script>
+  </body>
+</html>
+```
+
+<Info>
+`URL.createObjectURL()` produces a `blob:` URL that is valid only for the lifetime of the current page session. The URL is revoked automatically by the EmulatorJS engine after the ROM data has been read into the WASM filesystem.
+</Info>
+
+## Complete EmulatorJS Game Page
+
+The following is a complete, self-contained game page that matches the pattern used by `firered.html` and `kart64.html` in the repository:
+
+```html title="emulator-game.html — complete page"
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="title" content="EmulatorOS">
+  <meta name="description" content="Play Your Game Title free on EmulatorOS.">
+  <meta name="language" content="English">
+  <title>Your Game Title</title>
+  <link rel="icon" type="image/x-icon" href="/assets/img/socials/emulatoros.png" />
+  <link rel="stylesheet" href="/main.css">
+  <link rel="stylesheet" href="/contentpage.css">
+  <link
+    rel="stylesheet"
+    href="https://pro.fontawesome.com/releases/v5.10.0/css/all.css"
+    integrity="sha384-AYmEC3Yw5cVb3ZcuHtOA93w35dYTsvhLPVnYs9eStHfGJvOvKxVfELGroGkvsg+p"
+    crossorigin="anonymous"
+  />
+  <noscript>Your browser doesn't have JavaScript enabled.</noscript>
+  <style>
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Syne', sans-serif; background-color: #000000; }
+  </style>
+</head>
+
+<body>
+  <div class="content-wrapper" align="center">
+    <div class="main-content">
+      <section class="content">
+        <div class="content-container">
+
+          <!-- EmulatorJS container -->
+          <div class="emscripten" style="width: 860px; height: 480px; max-width: 100%;">
+            <div id="game"></div>
+          </div>
+
+          <!-- EJS configuration globals — must come before loader.js -->
+          <script type="text/javascript">
+            EJS_player     = '#game';
+            EJS_core       = 'gba';          // change per system
+            EJS_biosUrl    = '';
+            EJS_gameUrl    = '/gdata/your-rom-file.gba';
+            EJS_pathtodata = 'data/';
+          </script>
+          <script src="data/loader.js"></script>
+
+          <!-- Metadata bar -->
+          <div class="bar">
+            <div class="bar-left">
+              <h1 id="content-title">Your Game Title</h1>
+              <h3 id="content-creator">by Publisher Name</h3>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <div class="desc">
+        <h1>Description</h1>
+        <p id="content-desc">Description of your game goes here.</p>
+        <br>
+        <h1>Controls</h1>
+        <ul id="content-controls">
+          <p>Enter — Start / Pause</p>
+          <p>Arrow Keys — Movement</p>
+          <p>Z — A button &nbsp; X — B button</p>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  <script src="/main.js"></script>
+  <script src="/contentpage.js"></script>
+</body>
+
+</html>
+```
+
+<CardGroup cols={2}>
+  <Card title="Embed HTML5 Games" icon="window" href="/integration/embed-games">
+    How to embed HTML5 web games using the iframe pattern.
+  </Card>
+  <Card title="Configuration Reference" icon="sliders" href="/integration/configuration">
+    Every EJS_* global variable documented with types and defaults.
+  </Card>
+</CardGroup>

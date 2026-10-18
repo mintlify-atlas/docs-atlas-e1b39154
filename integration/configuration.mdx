@@ -1,0 +1,512 @@
+---
+title: "EmulatorJS Configuration Reference: All EJS_* Options"
+sidebarTitle: "Configuration"
+description: "Full reference for every window.EJS_* global in loader.js — required fields, playback, BIOS, UI, netplay, localization, callbacks, and ad integration."
+---
+
+EmulatorJS is configured entirely through `window.EJS_*` global variables declared before `loader.js` executes. There is no configuration object constructor or JSON file — every option is a property on `window`. The loader reads these globals, maps them to an internal `config` object, and passes that object to the `EmulatorJS` class constructor. Globals not set by the time `loader.js` runs are silently ignored (they evaluate as `undefined`, and the engine applies its built-in defaults). This reference documents every variable sourced directly from `loader.js` and `emulator.js`.
+
+---
+
+## Required
+
+These four globals must be defined on every EmulatorJS page. Omitting any of them prevents the engine from initialising.
+
+<ParamField path="EJS_player" type="string" required>
+  CSS selector string for the container element into which the emulator UI is mounted. The element must exist in the DOM before `loader.js` executes.
+
+  ```js
+  window.EJS_player = "#game";
+  ```
+</ParamField>
+
+<ParamField path="EJS_core" type="string" required>
+  System identifier that selects the emulator core. Must be one of the following values:
+
+  `nes`, `snes`, `n64`, `gba`, `gb`, `nds`, `psx`, `vb`, `sega`, `segaMS`, `segaCD`, `segaMD`, `segaGG`, `sega32x`, `segaSaturn`, `lynx`, `atari2600`, `atari7800`, `atari5200`, `jaguar`, `arcade`, `mame2003`, `3do`, `psp`
+
+  ```js
+  window.EJS_core = "gba";
+  ```
+
+  See the [EmulatorJS Setup core table](/integration/emulatorjs-setup#core-selection-reference) for a system-to-core mapping.
+</ParamField>
+
+<ParamField path="EJS_gameUrl" type="string" required>
+  URL of the ROM file. Accepts relative paths, absolute URLs, and `blob:` URLs created with `URL.createObjectURL()`. For drag-and-drop workflows, pass the result of `URL.createObjectURL(new Blob([file]))`.
+
+  ```js
+  // Relative path
+  window.EJS_gameUrl = "/gdata/Mario Kart 64 (USA).z64";
+
+  // Blob URL (drag-and-drop)
+  window.EJS_gameUrl = URL.createObjectURL(new Blob([romFile]));
+  ```
+</ParamField>
+
+<ParamField path="EJS_pathtodata" type="string" required>
+  URL path to the `data/` directory. Must end with a `/`. If omitted, the loader infers the path from its own `script.src` attribute.
+
+  ```js
+  window.EJS_pathtodata = "data/";
+  // or for a CDN-hosted data directory:
+  window.EJS_pathtodata = "/assets/emulatorjs/data/";
+  ```
+</ParamField>
+
+---
+
+## Game Info
+
+<ParamField path="EJS_gameName" type="string">
+  Display name of the game. Shown in the emulator toolbar and used as the filename suggestion when saving states. Mapped to `config.gameName`.
+
+  ```js
+  window.EJS_gameName = "Pokémon FireRed";
+  ```
+</ParamField>
+
+<ParamField path="EJS_gameID" type="number">
+  Unique numeric identifier for the game. Used by the netplay system to match players into the same room. Mapped to `config.gameId`.
+
+  ```js
+  window.EJS_gameID = 14;
+  ```
+</ParamField>
+
+---
+
+## Playback
+
+<ParamField path="EJS_startOnLoaded" type="boolean">
+  When `true`, emulation begins automatically as soon as the core and ROM have loaded, without requiring a user click. Defaults to `false`. Mapped to `config.startOnLoad`.
+
+  ```js
+  window.EJS_startOnLoaded = true;
+  ```
+</ParamField>
+
+<ParamField path="EJS_fullscreenOnLoaded" type="boolean">
+  When `true`, the emulator enters fullscreen mode immediately after the ROM loads. Defaults to `false`. Mapped to `config.fullscreenOnLoad`.
+
+  ```js
+  window.EJS_fullscreenOnLoaded = true;
+  ```
+</ParamField>
+
+<ParamField path="EJS_volume" type="number">
+  Initial audio volume. Accepts a value between `0` (muted) and `1` (maximum). Mapped to `config.volume`.
+
+  ```js
+  window.EJS_volume = 0.5;
+  ```
+</ParamField>
+
+---
+
+## BIOS & ROM
+
+<ParamField path="EJS_biosUrl" type="string">
+  URL to the system BIOS file. Required for cores that depend on a BIOS (PlayStation, Sega CD, etc.). Pass an empty string `""` for systems that do not require one. Mapped to `config.biosUrl`.
+
+  ```js
+  window.EJS_biosUrl = "/bios/scph1001.bin";
+  ```
+</ParamField>
+
+<ParamField path="EJS_loadStateURL" type="string">
+  URL to a save state file that is automatically loaded when emulation starts. The state file must have been saved with the same core version. Mapped to `config.loadState`.
+
+  ```js
+  window.EJS_loadStateURL = "/saves/my-save.state";
+  ```
+</ParamField>
+
+<ParamField path="EJS_gamePatchUrl" type="string">
+  URL to a ROM patch file in IPS or BPS format. The patch is applied to the ROM in memory before the core boots. Mapped to `config.gamePatchUrl`.
+
+  ```js
+  window.EJS_gamePatchUrl = "/patches/english-translation.ips";
+  ```
+</ParamField>
+
+<ParamField path="EJS_gameParentUrl" type="string">
+  URL to a parent ROM file. Used for arcade clone ROMs (MAME/FBNeo) that require a parent set, or for multi-disc games where a base image is needed. Mapped to `config.gameParentUrl`.
+
+  ```js
+  window.EJS_gameParentUrl = "/roms/sfiii-parent.zip";
+  ```
+</ParamField>
+
+---
+
+## UI & Appearance
+
+<ParamField path="EJS_color" type="string">
+  Hex colour string for the EmulatorJS UI accent (toolbar highlights, buttons). Mapped to `config.color`.
+
+  ```js
+  window.EJS_color = "#1a73e8";
+  ```
+</ParamField>
+
+<ParamField path="EJS_backgroundImage" type="string">
+  URL to an image file displayed as the emulator background before the ROM starts. Mapped to `config.backgroundImg`.
+
+  ```js
+  window.EJS_backgroundImage = "/assets/bg.jpg";
+  ```
+</ParamField>
+
+<ParamField path="EJS_backgroundBlur" type="boolean">
+  When `true`, applies a CSS blur filter to the background image set by `EJS_backgroundImage`. Mapped to `config.backgroundBlur`.
+
+  ```js
+  window.EJS_backgroundBlur = true;
+  ```
+</ParamField>
+
+<ParamField path="EJS_backgroundColor" type="string">
+  CSS colour value for the emulator background fill (shown before the ROM loads or when no background image is set). Mapped to `config.backgroundColor`.
+
+  ```js
+  window.EJS_backgroundColor = "#111111";
+  ```
+</ParamField>
+
+<ParamField path="EJS_Buttons" type="object">
+  Custom virtual gamepad button layout configuration object. Overrides the default on-screen button positions and labels. Mapped to `config.buttonOpts`.
+
+  ```js
+  window.EJS_Buttons = {
+    playPause: true,
+    restart: true,
+    mute: true,
+    settings: true,
+    fullscreen: true,
+    saveState: true,
+    loadState: true,
+    screenRecord: true,
+    gamepad: true,
+    cheat: true,
+    volume: true,
+    saveSavFiles: true
+  };
+  ```
+</ParamField>
+
+<ParamField path="EJS_VirtualGamepadSettings" type="object">
+  Configuration object for the on-screen virtual gamepad overlay displayed on touch devices. Controls button positions, sizes, and opacity. Mapped to `config.VirtualGamepadSettings`.
+
+  ```js
+  window.EJS_VirtualGamepadSettings = {
+    opacity: 0.7
+  };
+  ```
+</ParamField>
+
+<ParamField path="EJS_alignStartButton" type="string">
+  Controls the alignment of the Start button in the virtual gamepad overlay. Accepts CSS alignment values such as `"left"`, `"center"`, or `"right"`. Mapped to `config.alignStartButton`.
+
+  ```js
+  window.EJS_alignStartButton = "center";
+  ```
+</ParamField>
+
+---
+
+## Controls
+
+<ParamField path="EJS_defaultControls" type="object">
+  Default keyboard/gamepad bindings for each controller port. The object keys are player indices; the values are binding maps. Mapped to `config.defaultControllers`.
+
+  ```js
+  window.EJS_defaultControls = {
+    0: {
+      0: { value: "88" },   // X key → A button
+      1: { value: "90" },   // Z key → B button
+      4: { value: "13" },   // Enter → Start
+      5: { value: "16" }    // Shift → Select
+    }
+  };
+  ```
+</ParamField>
+
+<ParamField path="EJS_controlScheme" type="string">
+  Preset control scheme name. When set, the engine loads a predefined binding set for the specified scheme identifier. Mapped to `config.controlScheme`.
+
+  ```js
+  window.EJS_controlScheme = "gameboy";
+  ```
+</ParamField>
+
+---
+
+## Paths & Cache
+
+<ParamField path="EJS_paths" type="object">
+  Override map for individual file paths. Keys are filenames (as the engine would request them relative to `data/`); values are full URLs to load instead. Useful for CDN hosting of specific assets. Mapped to `config.filePaths`.
+
+  ```js
+  window.EJS_paths = {
+    "emulator.min.js": "https://cdn.example.com/emulator.min.js",
+    "emulator.min.css": "https://cdn.example.com/emulator.min.css"
+  };
+  ```
+
+  You can also override localization file paths by using the language code as the key:
+
+  ```js
+  window.EJS_paths = {
+    "es-ES": "https://cdn.example.com/localization/es-ES.json"
+  };
+  ```
+</ParamField>
+
+<ParamField path="EJS_CacheLimit" type="number">
+  Maximum size in bytes for the browser-side asset cache used by the engine. Mapped to `config.cacheLimit`.
+
+  ```js
+  // 1 GB cache limit
+  window.EJS_CacheLimit = 1 * 1024 * 1024 * 1024;
+  ```
+</ParamField>
+
+---
+
+## Game Features
+
+<ParamField path="EJS_cheats" type="array">
+  Array of cheat code objects to pre-load into the cheat menu. Each object must have `code` (the cheat string), `desc` (display description), and `enabled` (whether the cheat is active on start). Mapped to `config.cheats`.
+
+  ```js
+  window.EJS_cheats = [
+    { code: "01FF20D3", desc: "Infinite Lives", enabled: false },
+    { code: "00FFAB80", desc: "Max Score",      enabled: false }
+  ];
+  ```
+</ParamField>
+
+<ParamField path="EJS_defaultOptions" type="object">
+  Default core option overrides. Keys are Libretro core option names; values are the desired setting strings. These are applied before the user-facing settings panel is shown. Mapped to `config.defaultOptions`.
+
+  ```js
+  window.EJS_defaultOptions = {
+    "mgba_gb_model": "Game Boy Color",
+    "mgba_frameskip": "0"
+  };
+  ```
+</ParamField>
+
+<ParamField path="EJS_SHADERS" type="object">
+  Map of shader preset names to GLSL shader source strings. When a user selects a shader preset in the settings menu, the engine writes the corresponding source to `/shader/shader.glslp` in the WASM virtual filesystem.
+
+  ```js
+  window.EJS_SHADERS = {
+    "CRT Scanlines": `
+      // GLSL shader source here
+      void main() { /* ... */ }
+    `
+  };
+  ```
+</ParamField>
+
+---
+
+## Netplay & Debug
+
+<ParamField path="EJS_netplayServer" type="string">
+  WebSocket URL of the netplay signalling server. Defaults to `https://netplay.emulatorjs.org` when not set. Change this only if you are hosting a private netplay server. Mapped to `config.netplayUrl`.
+
+  ```js
+  window.EJS_netplayServer = "wss://netplay.yourdomain.com";
+  ```
+</ParamField>
+
+<ParamField path="EJS_DEBUG_XX" type="boolean">
+  Switches the loader from minified production assets (`emulator.min.js`, `emulator.min.css`) to unminified debug sources (`emulator.js`, `nipplejs.js`, `shaders.js`, `storage.js`, `gamepad.js`, `GameManager.js`, `socket.io.min.js`, `emulator.css`). All of these files must be present in `data/` for debug mode to work.
+
+  ```js
+  window.EJS_DEBUG_XX = true;
+  ```
+
+  <Warning>
+  Never set `EJS_DEBUG_XX = true` in production. Unminified sources are significantly larger and will degrade load times.
+  </Warning>
+</ParamField>
+
+<ParamField path="EJS_EXPERIMENTAL_NETPLAY" type="boolean">
+  Enables the experimental peer-to-peer netplay feature. Requires `EJS_DEBUG_XX` to also be `true` — the flag is read in `emulator.js` as `(window.EJS_DEBUG_XX === true) && (window.EJS_EXPERIMENTAL_NETPLAY === true)`.
+
+  ```js
+  window.EJS_DEBUG_XX           = true;
+  window.EJS_EXPERIMENTAL_NETPLAY = true;
+  ```
+</ParamField>
+
+---
+
+## Localization
+
+<ParamField path="EJS_language" type="string">
+  BCP 47-style language code for the emulator UI. When set to any value other than `"en-US"`, the loader fetches the corresponding JSON file from `data/localization/<code>.json`. Available localization files in the repository:
+
+  | Code | Language |
+  |---|---|
+  | `af-FR` | Afrikaans |
+  | `ar-AR` | Arabic |
+  | `ben-BEN` | Bengali |
+  | `de-GER` | German |
+  | `el-GR` | Greek |
+  | `es-ES` | Spanish |
+  | `hi-HI` | Hindi |
+  | `ja-JA` | Japanese |
+  | `jv-JV` | Javanese |
+  | `ko-KO` | Korean |
+  | `pt-BR` | Portuguese (Brazil) |
+  | `ru-RU` | Russian |
+  | `zh-CN` | Simplified Chinese |
+
+  ```js
+  window.EJS_language = "es-ES";
+  ```
+
+  <Note>
+  The default value `"en-US"` requires no JSON file — English strings are compiled into the engine. Setting any other value triggers a `fetch()` for the localization JSON.
+  </Note>
+</ParamField>
+
+<ParamField path="EJS_missingLang" type="array">
+  Auto-populated by the engine at runtime with any localization key strings that were not found in the loaded language JSON. You do not set this variable; you read it after the emulator has started to identify gaps in a translation.
+
+  ```js
+  // Read after emulator starts to find untranslated strings
+  console.log(window.EJS_missingLang);
+  ```
+</ParamField>
+
+<ParamField path="EJS_settingsLanguage" type="boolean">
+  When `true`, the emulator settings panel labels are also passed through the localization system (using the language set by `EJS_language`). Defaults to `false`. Read directly from `window` in `emulator.js` as `window.EJS_settingsLanguage || false`.
+
+  ```js
+  window.EJS_settingsLanguage = true;
+  ```
+</ParamField>
+
+---
+
+## Callbacks
+
+<ParamField path="EJS_ready" type="function">
+  Callback function fired when the `EmulatorJS` instance emits its `"ready"` event — after all scripts and styles have loaded but before the ROM starts. Registered via `window.EJS_emulator.on("ready", ...)`.
+
+  ```js
+  window.EJS_ready = function () {
+    console.log("EmulatorJS is ready");
+  };
+  ```
+</ParamField>
+
+<ParamField path="EJS_onGameStart" type="function">
+  Callback fired when the `"start"` event fires — immediately before the first emulation frame renders. Registered via `window.EJS_emulator.on("start", ...)`.
+
+  ```js
+  window.EJS_onGameStart = function () {
+    console.log("Game has started");
+  };
+  ```
+</ParamField>
+
+<ParamField path="EJS_onLoadState" type="function">
+  Callback fired when a save state is loaded (`"load"` event). Registered via `window.EJS_emulator.on("load", ...)`.
+
+  ```js
+  window.EJS_onLoadState = function () {
+    console.log("Save state loaded");
+  };
+  ```
+</ParamField>
+
+<ParamField path="EJS_onSaveState" type="function">
+  Callback fired when a save state is written (`"save"` event). Registered via `window.EJS_emulator.on("save", ...)`.
+
+  ```js
+  window.EJS_onSaveState = function () {
+    console.log("Save state written");
+  };
+  ```
+</ParamField>
+
+<ParamField path="EJS_adBlocked" type="function">
+  Callback invoked when an ad URL is blocked or fails to load. After the loader runs, `window.EJS_adBlocked` is overwritten with a closure that calls `window.EJS_emulator.adBlocked(url, del)`. You can define this before `loader.js` runs to capture the call, but the loader will replace your definition.
+
+  ```js
+  // Define before loader.js to intercept ad-blocked events
+  window.EJS_adBlocked = function (url, del) {
+    console.warn("Ad blocked:", url);
+    del(); // call del() to proceed without the ad
+  };
+  ```
+</ParamField>
+
+---
+
+## Ad Integration
+
+<ParamField path="EJS_AdUrl" type="string">
+  URL of the ad iframe to display before the game starts. Mapped to `config.adUrl`. When set, the engine calls `setupAds(adUrl, adSize[0], adSize[1])` internally.
+
+  ```js
+  window.EJS_AdUrl = "https://ads.example.com/preroll";
+  ```
+</ParamField>
+
+<ParamField path="EJS_AdMode" type="string">
+  Mode string controlling ad display behaviour. Mapped to `config.adMode`.
+
+  ```js
+  window.EJS_AdMode = "preroll";
+  ```
+</ParamField>
+
+<ParamField path="EJS_AdTimer" type="number">
+  Duration in milliseconds for the ad display timer. Mapped to `config.adTimer`.
+
+  ```js
+  window.EJS_AdTimer = 15000; // 15 seconds
+  ```
+</ParamField>
+
+<ParamField path="EJS_AdSize" type="array">
+  Two-element array `[width, height]` passed to `setupAds()` to size the ad iframe. Mapped to `config.adSize`.
+
+  ```js
+  window.EJS_AdSize = [728, 90];
+  ```
+</ParamField>
+
+---
+
+## Live Instance
+
+After `loader.js` finishes, two additional globals are set by the loader itself:
+
+<ParamField path="EJS_emulator" type="object">
+  The live `EmulatorJS` class instance. Set by `loader.js` as `window.EJS_emulator = new EmulatorJS(EJS_player, config)`. Use this reference to call instance methods or subscribe to events after the loader has run.
+
+  ```js
+  // Access after loader.js has executed
+  window.EJS_emulator.on("ready", () => {
+    console.log("EmulatorJS version:", window.EJS_emulator.version);
+  });
+  ```
+</ParamField>
+
+<CardGroup cols={2}>
+  <Card title="EmulatorJS Setup" icon="microchip" href="/integration/emulatorjs-setup">
+    Step-by-step guide to hosting the engine and wiring up these globals.
+  </Card>
+  <Card title="Embed Games" icon="window" href="/integration/embed-games">
+    How to embed HTML5 web games using the iframe pattern.
+  </Card>
+</CardGroup>

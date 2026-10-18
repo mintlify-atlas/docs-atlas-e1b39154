@@ -1,0 +1,273 @@
+---
+title: "EmulatorJS: WebAssembly Retro Console Emulation"
+sidebarTitle: "EmulatorJS Engine"
+description: "Deep-dive into the EmulatorJS WebAssembly engine: 20+ supported systems, save states, virtual gamepad, shaders, netplay, and the full loader.js bootstrap flow."
+---
+
+EmulatorJS is a WebAssembly-based in-browser emulation engine derived from RetroArch's libretro cores. EmulatorOS embeds it directly on retro game pages so players can run console ROMs without installing anything. The engine compiles each platform's emulator core to WASM, exposes a JavaScript configuration API through a set of `EJS_*` globals, and manages the entire lifecycle — ROM download, BIOS loading, save-state persistence, input routing, and rendering — inside a single `<div>` on the host page.
+
+## The EmulatorJS Class
+
+The entry point is the `EmulatorJS` class defined in `data/emulator.js`. Its `version` field is an integer incremented whenever the bundled WASM cores are updated:
+
+```javascript title="data/emulator.js — class header"
+class EmulatorJS {
+    version = 7; // Increase by 1 when cores are updated
+    // ...
+    constructor(element, config) {
+        this.ejs_version = "4.0.6";
+        this.ejs_num_version = 40.6;
+        this.debug = (window.EJS_DEBUG_XX === true);
+        // ...
+        this.netplayEnabled = (window.EJS_DEBUG_XX === true) && (window.EJS_EXPERIMENTAL_NETPLAY === true);
+        this.rewindEnabled = this.loadRewindEnabled();
+        this.isFastForward = false;
+        this.isSlowMotion  = false;
+        this.cheats = [];
+        this.volume = (typeof this.config.volume === "number") ? this.config.volume : 0.5;
+        // ...
+    }
+}
+```
+
+The constructor receives two arguments: `element` (a CSS selector string matching the player container `<div>`) and `config` (a plain object assembled by `loader.js` from the `EJS_*` globals on the page).
+
+## Supported Systems and Core Mappings
+
+`getCore()` maps every supported system identifier to its corresponding WASM core filename. The reverse mapping (generic system name → core name) is used internally for file-extension resolution and save-path construction.
+
+| System Identifier | WASM Core | Notes |
+|---|---|---|
+| `nes` | `fceumm` | Also `nestopia` as an alternative |
+| `snes` | `snes9x` | |
+| `gb` / `gbc` | `gambatte` | |
+| `gba` | `mgba` | |
+| `n64` | `mupen64plus_next` | Falls back to `parallel_n64` on mobile Safari |
+| `nds` | `melonds` | Also `desmume2015` |
+| `psx` | `pcsx_rearmed` | Also `mednafen_psx_hw` |
+| `segaMS` | `genesis_plus_gx` | Sega Master System |
+| `segaMD` | `genesis_plus_gx` | Sega Mega Drive / Genesis |
+| `segaGG` | `genesis_plus_gx` | Sega Game Gear |
+| `segaCD` | `genesis_plus_gx` | Sega CD |
+| `sega32x` | `picodrive` | |
+| `segaSaturn` | `yabause` | |
+| `atari2600` | `stella2014` | |
+| `atari7800` | `prosystem` | |
+| `atari5200` | `a5200` | |
+| `lynx` | `handy` | Atari Lynx |
+| `jaguar` | `virtualjaguar` | |
+| `vb` | `beetle_vb` | Virtual Boy |
+| `arcade` | `fbneo` | FBNeo; also `fbalpha2012_cps1/2` |
+| `mame2003` | `mame2003` | |
+| `3do` | `opera` | |
+| `psp` | `ppsspp` | Includes `ppsspp-assets.zip` |
+
+Each core has a matching `.data` file under `data/cores/` (e.g. `mgba-wasm.data`, `mupen64plus_next-wasm.data`) that is fetched on demand when a game of that system type is loaded.
+
+## Bootstrapping with loader.js
+
+`data/loader.js` is the thin glue that reads every `EJS_*` global, assembles the config object, and hands it to the `EmulatorJS` constructor. In production it loads the minified bundle; in debug mode (`EJS_DEBUG_XX = true`) it loads the individual source files for easier inspection.
+
+```javascript title="data/loader.js — config assembly (abridged)"
+(async function() {
+    // In production, load the single minified bundle
+    await loadScript('emulator.min.js');
+    await loadStyle('emulator.min.css');
+
+    const config = {};
+    config.gameUrl          = window.EJS_gameUrl;
+    config.system           = window.EJS_core;
+    config.biosUrl          = window.EJS_biosUrl;
+    config.gameName         = window.EJS_gameName;
+    config.dataPath         = scriptPath;
+    config.color            = window.EJS_color;
+    config.volume           = window.EJS_volume;
+    config.startOnLoad      = window.EJS_startOnLoaded;
+    config.fullscreenOnLoad = window.EJS_fullscreenOnLoaded;
+    config.cheats           = window.EJS_cheats;
+    config.backgroundImg    = window.EJS_backgroundImage;
+    config.backgroundBlur   = window.EJS_backgroundBlur;
+    config.netplayUrl       = window.EJS_netplayServer;
+    config.gameId           = window.EJS_gameID;
+    // ... (all other EJS_* globals)
+
+    window.EJS_emulator = new EmulatorJS(EJS_player, config);
+})();
+```
+
+### EJS_* Configuration Reference
+
+<Accordion title="All EJS_* global variables">
+
+| Variable | Type | Purpose |
+|---|---|---|
+| `EJS_player` | `string` | CSS selector for the player container element |
+| `EJS_core` | `string` | System identifier (e.g. `"gba"`, `"n64"`) |
+| `EJS_gameUrl` | `string` | URL or path to the ROM file |
+| `EJS_biosUrl` | `string` | URL or path to the BIOS file (if required) |
+| `EJS_gameName` | `string` | Display name shown in the UI |
+| `EJS_pathtodata` | `string` | Path to the `data/` directory |
+| `EJS_startOnLoaded` | `boolean` | Auto-start when the ROM finishes loading |
+| `EJS_fullscreenOnLoaded` | `boolean` | Enter fullscreen immediately on start |
+| `EJS_volume` | `number` | Initial volume (0–1, defaults to 0.5) |
+| `EJS_color` | `string` | Accent colour for the UI chrome |
+| `EJS_cheats` | `Array` | Array of `[description, code]` pairs to pre-load |
+| `EJS_defaultControls` | `object` | Override default controller button mapping |
+| `EJS_loadStateURL` | `string` | URL to a `.state` file to auto-load on start |
+| `EJS_backgroundImage` | `string` | URL for a pre-start background image |
+| `EJS_backgroundBlur` | `boolean` | Apply CSS blur to the background image |
+| `EJS_backgroundColor` | `string` | Background colour before the game starts |
+| `EJS_language` | `string` | Locale code for the UI (e.g. `"de-GER"`) |
+| `EJS_gameID` | `number` | Numeric game ID required for netplay lobby |
+| `EJS_netplayServer` | `string` | Custom netplay server URL |
+| `EJS_DEBUG_XX` | `boolean` | Enable debug mode (loads unminified sources) |
+| `EJS_EXPERIMENTAL_NETPLAY` | `boolean` | Enable experimental netplay (requires debug mode) |
+| `EJS_CacheLimit` | `number` | IndexedDB cache size limit in bytes |
+
+</Accordion>
+
+## Save State System
+
+Save files are stored persistently using the Emscripten `IDBFS` virtual filesystem, mounted at `/data/saves` inside the WASM module. The `EJS_GameManager` class sets this up during emulator initialisation:
+
+```javascript title="data/GameManager.js — IDBFS mount"
+this.mkdir("/data/saves");
+// ...
+this.FS.mount(IDBFS, {}, '/data/saves');
+```
+
+The RetroArch configuration written at startup directs the core to write its save data into this directory:
+
+```javascript title="data/GameManager.js — savefile_directory config line"
+"savefile_directory = \"/data/saves\"\n"
+```
+
+Players can also choose to keep save states in the browser (IndexedDB via `EJS_STORAGE`) or download them as `.state` files — both options are available from the in-game settings toolbar.
+
+## Input: Virtual and Physical Gamepad
+
+EmulatorJS provides two complementary input systems:
+
+<CardGroup cols={2}>
+  <Card title="Virtual Gamepad" icon="mobile">
+    An on-screen touch controller rendered over the canvas on mobile or when explicitly enabled. Button layout and positions are configurable via `EJS_VirtualGamepadSettings`. Rewind is available as a dedicated virtual button when the feature is enabled.
+  </Card>
+  <Card title="Physical Gamepad (GamepadHandler)" icon="gamepad">
+    `data/gamepad.js` implements the `GamepadHandler` class. It polls `navigator.getGamepads()` on a 10 ms interval, compares axis and button states against the previous frame, and dispatches `buttondown`, `buttonup`, and `axischanged` events consumed by the emulator's input mapper.
+  </Card>
+</CardGroup>
+
+```javascript title="data/gamepad.js — polling loop"
+loop() {
+    this.updateGamepadState();
+    this.timeout = setTimeout(this.loop.bind(this), 10);
+}
+```
+
+## Gameplay Features
+
+<Accordion title="Fast-Forward, Slow Motion, and Rewind">
+All three speed-control modes are exposed through the settings menu and mapped to toolbar buttons. Fast-forward and slow-motion toggle the `isFastForward` / `isSlowMotion` flags on the `EmulatorJS` instance; rewind is a RetroArch-level feature that requires a restart to enable and is configurable by granularity. The virtual gamepad includes a rewind button when the feature is active:
+
+```javascript title="data/emulator.js — rewind virtual button registration"
+if (this.rewindEnabled) {
+    speedControlButtons.push({
+        "type": "button", "text": "Rewind", "id": "speed-rewind",
+        "location": "center", "left": 30, "top": 50,
+        "fontSize": 15, "block": true, "input_value": 28
+    });
+}
+```
+</Accordion>
+
+<Accordion title="GLSL Shader Support">
+The engine supports RetroArch `.glslp` shader presets. When a shader is selected from the settings menu, the preset file is written into the WASM virtual filesystem at `/shader/shader.glslp` and activated:
+
+```javascript title="data/emulator.js — shader application"
+if (option === "shader") {
+    try {
+        this.Module.FS.unlink("/shader/shader.glslp");
+    } catch(e) {}
+    // ...
+    this.Module.FS.writeFile("/shader/shader.glslp", window.EJS_SHADERS[value]);
+}
+```
+</Accordion>
+
+<Accordion title="Cheat Codes">
+Cheats are passed as an array of `[description, code]` pairs via the `EJS_cheats` global. The constructor iterates the array and registers each entry:
+
+```javascript title="data/emulator.js — cheat registration"
+if (Array.isArray(this.config.cheats)) {
+    for (let i = 0; i < this.config.cheats.length; i++) {
+        const cheat = this.config.cheats[i];
+        if (Array.isArray(cheat) && cheat[0] && cheat[1]) {
+            this.cheats.push({
+                desc:    cheat[0],
+                checked: false,
+                code:    cheat[1]
+            });
+        }
+    }
+}
+```
+</Accordion>
+
+<Accordion title="Screenshots">
+The toolbar provides a Take Screenshot button. It calls `gameManager.screenshot()`, wraps the result in a `Blob`, and triggers a download link — no server round-trip required:
+
+```javascript title="data/emulator.js — screenshot handler"
+const screenshot = addButton("Take Screenshot", false, () => {
+    if (screenshotUrl) URL.revokeObjectURL(screenshotUrl);
+    const screenshot = this.gameManager.screenshot();
+    const blob = new Blob([screenshot]);
+    screenshotUrl = URL.createObjectURL(blob);
+    // ... triggers anchor download
+});
+```
+</Accordion>
+
+<Accordion title="Background Image and Blur">
+A pre-start background image can be displayed while the ROM loads. Setting `EJS_backgroundBlur = true` applies a CSS blur to the image. Both the image and blur are removed automatically when the emulator starts:
+
+```javascript title="data/emulator.js — background image setup"
+if (typeof this.config.backgroundImg === "string") {
+    this.game.classList.add("ejs_game_background");
+    if (this.config.backgroundBlur) this.game.classList.add("ejs_game_background_blur");
+    this.game.setAttribute("style",
+        "--ejs-background-image: url(" + this.config.backgroundImg + "); " +
+        "--ejs-background-color: " + this.config.backgroundColor + ";"
+    );
+    this.on("start", () => {
+        this.game.classList.remove("ejs_game_background");
+        if (this.config.backgroundBlur) this.game.classList.remove("ejs_game_background_blur");
+    });
+}
+```
+</Accordion>
+
+## Netplay (Experimental)
+
+Netplay support is gated behind two flags that must both be set before `loader.js` runs:
+
+```javascript title="Page script — enabling experimental netplay"
+window.EJS_DEBUG_XX            = true;
+window.EJS_EXPERIMENTAL_NETPLAY = true;
+window.EJS_gameID              = 14;   // must be a number
+window.EJS_netplayServer       = "https://netplay.emulatorjs.org"; // default
+```
+
+Both flags are checked in the constructor: `this.netplayEnabled = (window.EJS_DEBUG_XX === true) && (window.EJS_EXPERIMENTAL_NETPLAY === true)`. If `EJS_gameID` is not a number or `netplayUrl` is falsy, the netplay toolbar button is hidden regardless of the flags.
+
+<Warning>
+  Netplay is experimental. The `EJS_DEBUG_XX` flag also switches the loader from the minified production bundle to individual unminified source files, which increases load time significantly. Do not leave it enabled on production pages.
+</Warning>
+
+## Localisation
+
+The UI supports 14 language locales via JSON files in `data/localization/`. Set `EJS_language` to any of the supported locale codes and `loader.js` will fetch the corresponding file and pass it to the engine:
+
+```
+af-FR, ar-AR, ben-BEN, de-GER, el-GR, en, es-ES,
+hi-HI, ja-JA, jv-JV, ko-KO, pt-BR, ru-RU, zh-CN
+```

@@ -1,0 +1,192 @@
+---
+title: "Service Worker & Offline Caching in EmulatorOS"
+sidebarTitle: "Service Worker"
+description: "How EmulatorOS registers sw.js, caches assets with a cache-first fetch strategy, busts stale caches on activate, and drives the PWA install prompt."
+---
+
+EmulatorOS ships as a Progressive Web App (PWA). A service worker registered via `sw-loader.js` intercepts all network requests and returns cached responses when available, so pages load even with a poor connection. The same service worker drives the browser's native "Add to Home Screen" install prompt, surfacing it to the user on their first interaction with any page.
+
+## Registration
+
+`sw-loader.js` is the entry point. It calls `navigator.serviceWorker.register('/sw.js')` and logs the resulting scope on success:
+
+```javascript title="sw-loader.js — service worker registration"
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').then(function(reg) {
+        // Registration worked
+        console.log('Registration succeeded. Scope is ' + reg.scope);
+    }).catch(function(error) {
+        // Registration failed
+        console.log('Registration failed with ' + error);
+    });
+}
+```
+
+Registration is guarded by a feature-detection check (`'serviceWorker' in navigator`), so browsers that do not support the API silently skip the block without throwing.
+
+## Install Event: Opening the Cache
+
+When the browser first installs the service worker, the `install` event fires. `sw.js` opens a cache named by the `CACHE_NAME` constant (`'v2'`) and calls `cache.addAll()` on the `urlsToCache` array. `self.skipWaiting()` is called inside the `addAll` promise so the new worker activates immediately without waiting for existing tabs to close.
+
+```javascript title="sw.js — install event"
+var CACHE_NAME = 'v2';
+
+var urlsToCache = [
+    // Add static asset paths here to pre-cache them on install
+];
+
+self.addEventListener('install', function(event) {
+    event.waitUntil(
+        caches.open(CACHE_NAME)
+            .then(function(cache) {
+                console.log('Opened cache');
+                return cache.addAll(urlsToCache);
+            })
+            .then(() => {
+                console.log('Cache downloaded');
+                self.skipWaiting();
+            })
+    );
+});
+```
+
+<Note>
+  `urlsToCache` is currently an empty array, meaning the service worker opens the named cache but does not pre-populate it at install time. Assets are added to the cache on first fetch (runtime caching) via the fetch handler below.
+</Note>
+
+## Fetch Event: Cache-First Strategy
+
+Every outgoing request passes through the `fetch` handler. The worker checks the cache first; if a match exists it is returned immediately without hitting the network. A cache miss falls through to `fetch(event.request)` and the response comes from the network as normal:
+
+```javascript title="sw.js — fetch event (cache-first)"
+self.addEventListener('fetch', function(event) {
+    event.respondWith(
+        caches.match(event.request)
+            .then(function(response) {
+                // Cache hit — return cached response
+                if (response) {
+                    return response;
+                }
+                console.log('cache miss', event.request.url);
+                return fetch(event.request);
+            })
+    );
+});
+```
+
+This strategy prioritises speed for returning visitors: once an asset is cached it is served instantly, regardless of network conditions.
+
+<Tip>
+  To force a resource to always be served fresh from the network, increment `CACHE_NAME` (see [Cache Versioning](#cache-versioning) below). This invalidates all cached responses for the old cache name.
+</Tip>
+
+## Activate Event: Pruning Stale Caches
+
+When the service worker activates after an update, the `activate` event iterates all existing cache names and deletes any that are not in the `cacheAllowlist`. After pruning, it uses `clients.matchAll()` to send a `{ type: 'updated' }` message to every controlled window so the UI can prompt the user to reload:
+
+```javascript title="sw.js — activate event"
+self.addEventListener('activate', function(event) {
+    console.log('activated, remove unused cache...');
+    var cacheAllowlist = [CACHE_NAME];
+
+    event.waitUntil(
+        caches.keys().then(function(cacheNames) {
+            return Promise.all(
+                cacheNames.map(function(cacheName) {
+                    if (cacheAllowlist.indexOf(cacheName) === -1) {
+                        console.log(cacheName);
+                        return caches.delete(cacheName);
+                    }
+                })
+            );
+        })
+    );
+
+    clients.matchAll({ includeUncontrolled: true, type: 'window' }).then((arr) => {
+        for (client of arr) {
+            client.postMessage({ type: 'updated' });
+        }
+    });
+});
+```
+
+## Cache Versioning
+
+The `CACHE_NAME` string (`'v2'`) acts as the cache version. To bust all stale cached assets after a deployment:
+
+<Steps>
+  <Step title="Increment CACHE_NAME in sw.js">
+    Change `var CACHE_NAME = 'v2';` to `'v3'` (or any new string that differs from the previous value).
+  </Step>
+  <Step title="Deploy sw.js">
+    Commit and push the updated `sw.js`. GitHub Pages will serve the new worker file from `/sw.js`.
+  </Step>
+  <Step title="Browser detects the change">
+    On the next page load the browser fetches `/sw.js`, sees it differs from the installed version, and runs the `install` event for the new worker.
+  </Step>
+  <Step title="Activate fires, old cache is deleted">
+    Once activated, the `activate` handler iterates all cache names. `'v2'` is no longer in `cacheAllowlist`, so it is deleted. The `{ type: 'updated' }` message is broadcast to all open tabs.
+  </Step>
+</Steps>
+
+## PWA Install Prompt
+
+`sw-loader.js` also handles the browser's `beforeinstallprompt` event, which fires when the PWA install criteria are met. The handler defers the prompt and re-triggers it on the user's next click — but only for the first two `beforeinstallprompt` firings (tracked by a counter) to avoid repeatedly pestering the user:
+
+```javascript title="sw-loader.js — PWA install prompt"
+(function() {
+    var cnt = 0;
+
+    window.onbeforeinstallprompt = function(e) {
+        cnt += 1;
+        if (cnt > 2) {
+            return; // Stop showing the prompt after two attempts
+        }
+        console.log('Before install prompt', e);
+        e.preventDefault(); // Prevent the default mini-infobar
+        var deferredPrompt = e;
+
+        window.onclick = function(e) {
+            deferredPrompt.prompt(); // Show the install dialog on click
+            window.onclick = null;   // Only prompt once per deferral
+        };
+    };
+})();
+```
+
+## Web App Manifest
+
+The `manifest.json` file provides the metadata the browser uses to install EmulatorOS as a standalone app. The `display: "fullscreen"` mode removes all browser UI chrome when launched from the home screen:
+
+```json title="manifest.json"
+{
+    "name": "EmulatorOS",
+    "short_name": "Canvas",
+    "start_url": ".",
+    "display": "fullscreen",
+    "background_color": "black",
+    "description": "EmulatorOS",
+    "icons": [{
+        "src": "icon.png",
+        "sizes": "512x512",
+        "type": "image/png"
+    }]
+}
+```
+
+<Warning>
+  The `short_name` is currently set to `"Canvas"` rather than `"EmulatorOS"`. This is the label that appears under the app icon on a device home screen after installation. Update it in `manifest.json` if a more descriptive name is preferred.
+</Warning>
+
+## Listening for the Updated Message
+
+Any page that wants to react to a service worker update (e.g. show a "New version available — reload" banner) can listen for the `{ type: 'updated' }` message posted by the `activate` handler:
+
+```javascript title="Page script — react to service worker updates"
+navigator.serviceWorker.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'updated') {
+        // Show a reload prompt to the user
+        console.log('A new version of EmulatorOS is available.');
+    }
+});
+```

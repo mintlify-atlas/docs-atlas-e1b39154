@@ -1,0 +1,266 @@
+---
+title: "Deploy EmulatorOS to GitHub Pages or Any Static Host"
+sidebarTitle: "Deployment"
+description: "Deploy EmulatorOS via the included GitHub Actions workflow or any static host. Covers HTTPS requirements, CORS, and service worker cache versioning."
+---
+
+EmulatorOS is a pure static web application — every file in the repository is a deployable artifact. There is no build step, no server-side runtime, and no dependency installation. Deployment means copying the repository root to a host that can serve static files over HTTPS. The repository ships with a ready-made GitHub Actions workflow that handles this automatically on every push to `main`.
+
+## Current Version
+
+EmulatorOS follows semantic versioning (`Major.Minor.Patch`). The current release is declared in `main.js`:
+
+```javascript title="main.js — version declaration"
+// Semantic - Major.Minor.Patch
+const sArr = [`1`, `4`, `0`];
+const version = "v" + sArr.join(".");
+```
+
+The current version is **v1.4.0**. The `version` constant is available globally on every page that loads `main.js`.
+
+---
+
+## GitHub Pages (Default)
+
+The repository includes a GitHub Actions workflow at `.github/workflows/pages.yml` that automatically deploys the entire repository root to GitHub Pages whenever a commit lands on the `main` branch.
+
+### Workflow File
+
+```yaml title=".github/workflows/pages.yml"
+# Simple workflow for deploying static content to GitHub Pages
+name: Deploy static content to Pages
+
+on:
+  # Runs on pushes targeting the default branch
+  push:
+    branches: ["main"]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  # Single deploy job since we're just deploying
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup Pages
+        uses: actions/configure-pages@v2
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v1
+        with:
+          # Upload entire repository
+          path: '.'
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v1
+```
+
+### How It Works
+
+<Steps>
+  ### Trigger
+
+  The workflow fires on every push to the `main` branch, and can also be triggered manually from the **Actions** tab in the GitHub repository UI via `workflow_dispatch`.
+
+  ### Permissions
+
+  Three token permissions are required:
+
+  | Permission | Scope | Reason |
+  |---|---|---|
+  | `contents: read` | Repository contents | Checkout the source files |
+  | `pages: write` | GitHub Pages deployment | Upload and publish the artifact |
+  | `id-token: write` | OIDC identity | Required by `actions/deploy-pages` for secure deployment |
+
+  ### Concurrency
+
+  The `concurrency` block defines the group `"pages"` with `cancel-in-progress: true`. If a second push arrives while a deployment is already running, the in-flight job is cancelled and the newer deployment takes over. This prevents out-of-order deployments.
+
+  ### Artifact upload
+
+  `actions/upload-pages-artifact@v1` packages the repository root (`path: '.'`) as the deployment artifact. Every HTML, JS, CSS, JSON, and image file at the root is included — no filtering or compilation occurs.
+
+  ### Deploy
+
+  `actions/deploy-pages@v1` publishes the artifact to the GitHub Pages CDN. The live URL is emitted as `steps.deployment.outputs.page_url` and displayed in the workflow summary.
+</Steps>
+
+### Enabling GitHub Pages for a Fork
+
+If you have forked EmulatorOS and want to deploy your own instance:
+
+1. Go to **Settings → Pages** in your GitHub repository.
+2. Under **Build and deployment**, select **Source: GitHub Actions**.
+3. Push any commit to `main` — the workflow will run automatically.
+
+<Note>
+  GitHub Pages for public repositories is free. For private repositories it requires a GitHub Pro, Team, or Enterprise plan. The platform works identically either way once Pages is enabled.
+</Note>
+
+---
+
+## Other Static Hosts
+
+Because EmulatorOS has no server-side logic, any static file host can serve it. Point the server document root at the repository root and the site works immediately.
+
+<CardGroup cols={2}>
+  <Card title="Netlify" icon="n">
+    Drag and drop the repository folder in the Netlify UI, or connect your GitHub repo. Set the **publish directory** to `.` (repository root) and leave the build command blank.
+  </Card>
+  <Card title="Vercel" icon="triangle">
+    Import the GitHub repository. Set the **output directory** to `.` and leave the build and install commands empty. Vercel detects a static site automatically.
+  </Card>
+  <Card title="Cloudflare Pages" icon="cloud">
+    Connect the GitHub repo. Set **build output directory** to `/` (root). No build command is needed. Cloudflare Pages deploys on every push.
+  </Card>
+  <Card title="Self-hosted nginx" icon="server">
+    Copy the repository to your server and point the nginx `root` directive at the directory. No special configuration is required beyond serving static files.
+  </Card>
+</CardGroup>
+
+### Example nginx Configuration
+
+```nginx title="/etc/nginx/sites-available/emulatoros"
+server {
+    listen 443 ssl http2;
+    server_name games.example.com;
+
+    root /var/www/emulatoros;
+    index index.html;
+
+    # Serve all static files; fall back to index.html
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Cache static assets aggressively
+    location ~* \.(js|css|png|jpg|wasm|data)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    ssl_certificate     /etc/letsencrypt/live/games.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/games.example.com/privkey.pem;
+}
+```
+
+---
+
+## Requirements
+
+### HTTPS is Mandatory
+
+Two core features of EmulatorOS require a secure context (HTTPS):
+
+- **Service worker registration** — browsers refuse to register service workers on `http://` origins.
+- **PWA install prompt** — `beforeinstallprompt` is only fired on HTTPS pages.
+
+`sw-loader.js` registers the service worker unconditionally on page load. If the page is served over plain HTTP, the registration will silently fail and offline caching will not work.
+
+<Warning>
+  Do not serve EmulatorOS over plain HTTP in production. Use Let's Encrypt (free) or your host's built-in TLS to enable HTTPS. `localhost` is treated as a secure context by browsers and is safe for local development.
+</Warning>
+
+### ROM File Serving and CORS
+
+ROM files referenced via `EJS_gameUrl` must be accessible to the browser. Two configurations are supported:
+
+**Same origin** (recommended): Host ROM files in a `gdata/` subdirectory of the same domain. No CORS configuration is needed.
+
+**Cross-origin CDN**: If ROM files are hosted on a separate domain (e.g., a CDN bucket), that server must include the following response header:
+
+```
+Access-Control-Allow-Origin: https://your-pages-domain.github.io
+```
+
+Or use a wildcard for public files:
+
+```
+Access-Control-Allow-Origin: *
+```
+
+Without the correct CORS header, the browser will block the ROM fetch and the emulator will fail to start.
+
+### `data/` Directory Accessibility
+
+The `EJS_pathtodata` variable tells `loader.js` where to find the EmulatorJS assets — core scripts, WASM binaries, CSS, and localization files. The default value is `'data/'`, meaning the `data/` directory must be accessible at that relative path from the page URL.
+
+```
+https://emulatoros.github.io/bomberman.html
+                             ↑
+                             data/ is resolved relative to here
+                             → https://emulatoros.github.io/data/
+```
+
+If you move game pages into subdirectories (e.g., `games/bomberman.html`), update `EJS_pathtodata` to `'../data/'` or use an absolute path:
+
+```javascript
+EJS_pathtodata = '/data/';   // absolute — works from any subdirectory
+```
+
+---
+
+## Service Worker Cache Versioning
+
+The service worker in `sw.js` uses a `CACHE_NAME` constant to version its cache bucket. On activation, it deletes any cache bucket whose name is not in the current allowlist — effectively busting cached assets when the version changes.
+
+```javascript title="sw.js — cache version"
+var CACHE_NAME = 'v2';
+```
+
+<Steps>
+  ### Increment `CACHE_NAME` in `sw.js`
+
+  Change `'v2'` to `'v3'` (or any new unique string) before pushing a deployment that changes JavaScript, CSS, or core assets.
+
+  ### Commit and push to `main`
+
+  The GitHub Pages workflow will deploy the updated `sw.js`.
+
+  ### Clients receive the update
+
+  On the next page load, the browser installs the new service worker. The `activate` event fires, old cache buckets are deleted, and a `{type: 'updated'}` message is posted to all open tabs so the UI can notify the user.
+
+  ```javascript title="sw.js — activate handler (excerpt)"
+  self.addEventListener('activate', function(event) {
+      var cacheAllowlist = [CACHE_NAME];
+      event.waitUntil(
+          caches.keys().then(function(cacheNames) {
+              return Promise.all(
+                  cacheNames.map(function(cacheName) {
+                      if (cacheAllowlist.indexOf(cacheName) === -1) {
+                          return caches.delete(cacheName);
+                      }
+                  })
+              );
+          })
+      );
+      clients.matchAll({ includeUncontrolled: true, type: 'window' })
+          .then((arr) => {
+              for (client of arr) {
+                  client.postMessage({ type: 'updated' });
+              }
+          });
+  });
+  ```
+</Steps>
+
+<Tip>
+  Align `CACHE_NAME` with the semantic version in `main.js`. For example, when bumping to v1.5.0, set `CACHE_NAME = 'v1.5.0'`. This makes it easy to correlate deployed cache buckets with source releases during debugging.
+</Tip>

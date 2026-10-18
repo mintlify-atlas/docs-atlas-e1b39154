@@ -1,0 +1,235 @@
+---
+title: "Supported Consoles and Emulation Cores in EmulatorJS"
+sidebarTitle: "Supported Systems"
+description: "Full table of every emulated console on EmulatorOS with EJS_core values, internal LibRetro core names, accepted ROM extensions, and platform-specific notes."
+---
+
+EmulatorJS runs each emulated system through a dedicated LibRetro core compiled to WebAssembly. The `EJS_core` value you set on your page determines which core is loaded — EmulatorJS's `getCore()` method translates the human-friendly system name into the exact core filename, then downloads the `.wasm` and `.data` bundles for that core. The `version` field on the `EmulatorJS` class (currently `7`) increments whenever the bundled core binaries are updated, triggering a cache miss in `EJS_STORAGE` so users automatically receive the newer build.
+
+The `extensions` map on the `EmulatorJS` instance records which file extensions each core accepts, and is used by the drag-and-drop ROM loader page (`emulatorjs.html`) to validate dropped files before loading them into the virtual filesystem.
+
+---
+
+## How `EJS_core` Maps to Internal Cores
+
+When you set `window.EJS_core = "snes"`, the following translation occurs inside `getCore()`:
+
+```js title="getCore() translation table (from emulator.js)"
+const options = {
+    'jaguar':     'virtualjaguar',
+    'lynx':       'handy',
+    'segaSaturn': 'yabause',
+    'segaMS':     'genesis_plus_gx',
+    'segaMD':     'genesis_plus_gx',
+    'segaGG':     'genesis_plus_gx',
+    'segaCD':     'genesis_plus_gx',
+    'sega32x':    'picodrive',
+    'atari2600':  'stella2014',
+    'atari7800':  'prosystem',
+    'nes':        'fceumm',
+    'snes':       'snes9x',
+    'atari5200':  'a5200',
+    'gb':         'gambatte',
+    'gba':        'mgba',
+    'vb':         'beetle_vb',
+    'n64':        'mupen64plus_next',
+    'nds':        'melonds',
+    'mame2003':   'mame2003',
+    'arcade':     'fbneo',
+    'psx':        'pcsx_rearmed',
+    '3do':        'opera',
+    'psp':        'ppsspp'
+}
+```
+
+Any `EJS_core` value not present in this table is passed through as-is, allowing you to target an alternate core directly (e.g. `"nestopia"`, `"desmume2015"`, `"parallel_n64"`).
+
+---
+
+## Full Systems Table
+
+| System | `EJS_core` Value | Internal Core | ROM Extensions |
+|--------|-----------------|---------------|----------------|
+| Nintendo Entertainment System | `nes` | `fceumm` | `fds`, `nes`, `unif`, `unf` |
+| Super Nintendo | `snes` | `snes9x` | `smc`, `sfc`, `swc`, `fig`, `bs`, `st` |
+| Nintendo 64 | `n64` | `mupen64plus_next` | `n64`, `v64`, `z64`, `bin`, `u1`, `ndd`, `gb` |
+| Game Boy / Game Boy Color | `gb` | `gambatte` | `gb`, `gbc`, `dmg` |
+| Game Boy Advance | `gba` | `mgba` | `gb`, `gbc`, `gba` |
+| Nintendo DS | `nds` | `melonds` | `nds` |
+| PlayStation | `psx` | `pcsx_rearmed` | `bin`, `cue`, `img`, `mdf`, `pbp`, `toc`, `cbn`, `m3u`, `ccd` |
+| PlayStation Portable | `psp` | `ppsspp` | `elf`, `iso`, `cso`, `prx`, `pbp` |
+| Virtual Boy | `vb` | `beetle_vb` | `vb`, `vboy`, `bin` |
+| Sega Mega Drive / Genesis | `segaMD` | `genesis_plus_gx` | `md`, `smd`, `gen`, `bin`, `cue`, `iso`, `chd`, `bms`, `68k`, `sgd` |
+| Sega Master System | `segaMS` | `genesis_plus_gx` | `sms`, `sg` |
+| Sega Game Gear | `segaGG` | `genesis_plus_gx` | `gg` |
+| Sega CD | `segaCD` | `genesis_plus_gx` | `cue`, `iso`, `chd`, `m3u` |
+| Sega 32X | `sega32x` | `picodrive` | `32x`, `bin`, `md`, `smd`, `gen` |
+| Sega Saturn | `segaSaturn` | `yabause` | `cue`, `iso`, `ccd`, `mds`, `chd`, `zip`, `m3u` |
+| Atari 2600 | `atari2600` | `stella2014` | `a26`, `bin`, `zip` |
+| Atari 5200 | `atari5200` | `a5200` | `a52`, `bin` |
+| Atari 7800 | `atari7800` | `prosystem` | `a78`, `bin` |
+| Atari Lynx | `lynx` | `handy` | `lnx` |
+| Atari Jaguar | `jaguar` | `virtualjaguar` | `j64`, `jag`, `rom`, `abs`, `cof`, `bin`, `prg` |
+| 3DO Interactive Multiplayer | `3do` | `opera` | `iso`, `bin`, `chd`, `cue` |
+| Arcade (FBNeo) | `arcade` | `fbneo` | `zip`, `7z` |
+| Arcade (MAME 2003) | `mame2003` | `mame2003` | `zip` |
+| Arcade (CPS1) | `fbalpha2012_cps1` | `fbalpha2012_cps1` | `zip` |
+| Arcade (CPS2) | `fbalpha2012_cps2` | `fbalpha2012_cps2` | `zip` |
+
+---
+
+## Platform and Core Notes
+
+<Tabs>
+  <Tab title="Nintendo">
+    <CardGroup cols={2}>
+      <Card title="Nintendo 64" icon="n">
+        **Primary core:** `mupen64plus_next`
+
+        **Safari/iOS fallback:** On Safari for iOS and iPadOS, `getCore()` automatically substitutes `parallel_n64` because mupen64plus_next requires SharedArrayBuffer and cross-origin isolation headers that Safari does not support in all contexts.
+
+        ```js title="Automatic N64 core selection (from emulator.js)"
+        if (this.isSafari && this.isMobile && this.getCore(true) === "n64") {
+            return "parallel_n64";
+        }
+        ```
+
+        To force `parallel_n64` on all platforms, set `window.EJS_core = "parallel_n64"` directly.
+      </Card>
+      <Card title="Nintendo DS" icon="gamepad">
+        **Default core:** `melonds`
+
+        **Alternate core:** `desmume2015` — set `EJS_core = "desmume2015"` to use it directly. Note that `desmume2015` has poorer compatibility with later DS titles than melonds.
+
+        Most NDS games require a BIOS. Set `window.EJS_biosUrl` to a `.zip` or `.bin` containing the NDS BIOS files.
+      </Card>
+    </CardGroup>
+
+    **NES alternate core:** Setting `EJS_core = "nestopia"` uses Nestopia UE instead of FCEUmm. Nestopia has better accuracy on some titles but is slower. Both accept `fds`, `nes`, `unif`, `unf`.
+  </Tab>
+
+  <Tab title="PlayStation">
+    <CardGroup cols={2}>
+      <Card title="PlayStation (PSX)" icon="compact-disc">
+        **Core:** `pcsx_rearmed`
+
+        Requires a PSX BIOS (`SCPH-*.bin`). Multi-disc games should use `.m3u` playlists or `.cue`+`.bin` pairs.
+
+        The `GameManager` constructor writes a RetroArch config that forces software rendering for Beetle PSX HW compatibility:
+
+        ```js title="From GameManager.js constructor"
+        this.FS.writeFile(
+            "/home/web_user/retroarch/userdata/config/Beetle PSX HW/Beetle PSX HW.opt",
+            'beetle_psx_hw_renderer = "software"\n'
+        );
+        ```
+      </Card>
+      <Card title="PlayStation Portable" icon="gamepad">
+        **Core:** `ppsspp`
+
+        Requires PPSSPP system assets downloaded automatically as `cores/ppsspp-assets.zip`. These are decompressed into `/PPSSPP/` inside the virtual filesystem on first launch.
+
+        Accepts `elf`, `iso`, `cso`, `prx`, `pbp`.
+      </Card>
+    </CardGroup>
+  </Tab>
+
+  <Tab title="Sega">
+    **Shared core:** `segaMD`, `segaMS`, `segaGG`, and `segaCD` all resolve to `genesis_plus_gx`. The core auto-detects which system to emulate from the ROM header and file extension.
+
+    **Sega 32X** uses `picodrive` instead, as genesis_plus_gx does not support the 32X hardware.
+
+    **Sega Saturn** (`yabause`) is the least accurate of the bundled cores and requires a significant amount of RAM. Performance on low-end devices may be poor.
+
+    ```js title="Sega system EJS_core values"
+    window.EJS_core = "segaMD";      // Mega Drive / Genesis
+    window.EJS_core = "segaMS";      // Master System
+    window.EJS_core = "segaGG";      // Game Gear
+    window.EJS_core = "segaCD";      // Mega CD / Sega CD
+    window.EJS_core = "sega32x";     // 32X
+    window.EJS_core = "segaSaturn";  // Saturn
+    ```
+  </Tab>
+
+  <Tab title="Atari">
+    All four Atari systems use dedicated cores:
+
+    | System | Core | Notes |
+    |--------|------|-------|
+    | Atari 2600 | `stella2014` | Accepts `.zip` archives |
+    | Atari 5200 | `a5200` | BIOS required for most titles |
+    | Atari 7800 | `prosystem` | Most titles work without a BIOS |
+    | Atari Lynx | `handy` | Only accepts `.lnx` format |
+    | Atari Jaguar | `virtualjaguar` | Accepts multiple format variants |
+  </Tab>
+
+  <Tab title="Arcade">
+    **Three arcade cores are available.** The correct choice depends on which ROM set your game belongs to:
+
+    | Core | `EJS_core` | ROM Set |
+    |------|-----------|---------|
+    | FBNeo | `arcade` | FBNeo (modern, wide compatibility) |
+    | MAME 2003 Plus | `mame2003` | MAME 0.78 / 2003 set |
+    | CPS1 | `fbalpha2012_cps1` | Capcom CPS-1 titles (Street Fighter II, etc.) |
+    | CPS2 | `fbalpha2012_cps2` | Capcom CPS-2 titles (Super SF2, Darkstalkers, etc.) |
+
+    All arcade cores use `.zip` archives. FBNeo additionally accepts `.7z`.
+
+    <Warning>
+    Arcade ROMs must match the exact ROM set version for the core you are using. A MAME 2003 ROM zip will not work in FBNeo, and vice versa. Parent ROMs are often required — supply them via `window.EJS_gameParentUrl`.
+    </Warning>
+  </Tab>
+</Tabs>
+
+---
+
+## Extensions Map (Full Source)
+
+The complete `extensions` object from `emulator.js`, used internally to validate ROMs and build file-picker filters:
+
+```js title="EmulatorJS.extensions (from emulator.js)"
+extensions = {
+    'a5200':             ['a52', 'bin'],
+    'desmume2015':       ['nds', 'bin'],
+    'fbalpha2012_cps1':  ['zip'],
+    'fbalpha2012_cps2':  ['zip'],
+    'fbneo':             ['zip', '7z'],
+    'fceumm':            ['fds', 'nes', 'unif', 'unf'],
+    'gambatte':          ['gb', 'gbc', 'dmg'],
+    'genesis_plus_gx':   ['m3u', 'mdx', 'md', 'smd', 'gen', 'bin', 'cue',
+                          'iso', 'chd', 'bms', 'sms', 'gg', 'sg', '68k', 'sgd'],
+    'handy':             ['lnx'],
+    'mame2003':          ['zip'],
+    'mednafen_psx':      ['cue', 'toc', 'm3u', 'ccd', 'exe', 'pbp', 'chd'],
+    'mednafen_psx_hw':   ['cue', 'toc', 'm3u', 'ccd', 'exe', 'pbp', 'chd'],
+    'beetle_vb':         ['vb', 'vboy', 'bin'],
+    'melonds':           ['nds'],
+    'mgba':              ['gb', 'gbc', 'gba'],
+    'mupen64plus_next':  ['n64', 'v64', 'z64', 'bin', 'u1', 'ndd', 'gb'],
+    'nestopia':          ['fds', 'nes', 'unif', 'unf'],
+    'opera':             ['iso', 'bin', 'chd', 'cue'],
+    'parallel_n64':      ['n64', 'v64', 'z64', 'bin', 'u1', 'ndd', 'gb'],
+    'pcsx_rearmed':      ['bin', 'cue', 'img', 'mdf', 'pbp', 'toc', 'cbn', 'm3u', 'ccd'],
+    'picodrive':         ['bin', 'gen', 'smd', 'md', '32x', 'cue', 'iso', 'sms', '68k', 'chd'],
+    'ppsspp':            ['elf', 'iso', 'cso', 'prx', 'pbp'],
+    'prosystem':         ['a78', 'bin'],
+    'snes9x':            ['smc', 'sfc', 'swc', 'fig', 'bs', 'st'],
+    'stella2014':        ['a26', 'bin', 'zip'],
+    'virtualjaguar':     ['j64', 'jag', 'rom', 'abs', 'cof', 'bin', 'prg'],
+    'yabause':           ['cue', 'iso', 'ccd', 'mds', 'chd', 'zip', 'm3u']
+}
+```
+
+---
+
+## Upcoming Systems
+
+The following systems are noted as planned (`todo`) in the `getCore()` source but do not yet have bundled cores:
+
+<Accordion title="Planned future systems">
+  - **TurboGrafx-16 / PC Engine** (`pce`) — Beetle PCE
+  - **WonderSwan / WonderSwan Color** (`ws`) — Beetle WonderSwan
+  - **Neo Geo Pocket / Color** — Beetle NeoPop
+  - **MSX** — fMSX or blueMSX
+  - Others noted in source: FreeChaF, FreeIntv, Gearcoleco, NeoCD, O2EM, Vecx
+</Accordion>

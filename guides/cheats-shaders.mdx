@@ -1,0 +1,251 @@
+---
+title: "Enable Cheat Codes and GLSL Shaders in EmulatorJS"
+sidebarTitle: "Cheats & Shaders"
+description: "Pre-load cheat codes via EJS_cheats, manage them at runtime with EJS_GameManager, and apply custom GLSL shaders through the EJS_SHADERS global."
+---
+
+EmulatorJS exposes two powerful customization hooks that can be activated before the emulator starts: cheat codes that patch game memory at runtime, and GLSL shaders that post-process the video output through WebAssembly's virtual filesystem. Both are configured through global variables set on `window` before `data/loader.js` is included, and both can be manipulated programmatically after the emulator has started through the `EJS_GameManager` class.
+
+---
+
+## Cheat Codes
+
+### Pre-loading Cheats with `EJS_cheats`
+
+The `EJS_cheats` global accepts an array of two-element arrays. Each entry contains a human-readable description and the cheat code string in the format expected by the active RetroArch core (typically a Game Genie, GameShark, or Action Replay code):
+
+```html title="ROM page — pre-loading cheats"
+<script type="text/javascript">
+  EJS_player        = '#game';
+  EJS_core          = 'gba';
+  EJS_gameUrl       = '/gdata/my-rom.gba';
+  EJS_pathtodata    = 'data/';
+  EJS_startOnLoaded = false;
+
+  window.EJS_cheats = [
+    ["Infinite Lives",   "000012C4 0009"],
+    ["Max Score",        "000045A0 FFFF"],
+    ["Invincibility",    "02000000 E3A00001"]
+  ];
+</script>
+<script src="data/loader.js"></script>
+```
+
+Loader passes `EJS_cheats` directly to the `EmulatorJS` constructor as `config.cheats`. During startup the engine iterates the array and registers each entry:
+
+```javascript title="data/emulator.js — cheat initialisation (excerpt)"
+if (Array.isArray(this.config.cheats)) {
+    for (let i = 0; i < this.config.cheats.length; i++) {
+        const cheat = this.config.cheats[i];
+        if (Array.isArray(cheat) && cheat[0] && cheat[1]) {
+            this.cheats.push({
+                desc:    cheat[0],
+                checked: false,
+                code:    cheat[1]
+            });
+        }
+    }
+}
+```
+
+Pre-loaded cheats appear in the **Cheats** panel of the in-game settings menu. They are loaded in a disabled (`checked: false`) state by default — the player must enable them from the UI, or you can enable them programmatically (see below).
+
+<Note>
+  Cheat code syntax depends on the active core. A GameShark code valid for `mgba` (GBA) will not work for `snes9x` (SNES). Consult the upstream RetroArch core documentation for the correct code format for each system.
+</Note>
+
+### Runtime Cheat Management via `EJS_GameManager`
+
+After the emulator has started, the `EJS_GameManager` instance is accessible at `window.EJS_emulator.gameManager`. It exposes two methods for programmatic cheat control.
+
+#### `setCheat(index, enabled, code)`
+
+Sets or updates a cheat by its zero-based index in the cheat list. Wraps the WebAssembly export `set_cheat(index, enabled, code)`:
+
+```javascript title="data/GameManager.js — setCheat"
+setCheat(index, enabled, code) {
+    this.functions.setCheat(index, enabled, code);
+}
+```
+
+<ParamField path="index" type="number" required>
+  Zero-based position in the cheat list. Cheats are ordered as defined in `EJS_cheats` (pre-loaded) or as added through the UI.
+</ParamField>
+
+<ParamField path="enabled" type="number" required>
+  Pass `1` to activate the cheat, `0` to deactivate it.
+</ParamField>
+
+<ParamField path="code" type="string" required>
+  The cheat code string (e.g., `"000012C4 0009"`). This must match the format expected by the active core.
+</ParamField>
+
+**Example — enable the first pre-loaded cheat after game start:**
+
+```javascript title="Enable cheat at index 0 after emulator start"
+window.EJS_onGameStart = function() {
+    // EJS_GameManager is available once the game has started
+    window.EJS_emulator.gameManager.setCheat(0, 1, "000012C4 0009");
+};
+```
+
+#### `resetCheat()`
+
+Clears all active cheats in the WebAssembly core in a single call. Wraps `reset_cheat()`:
+
+```javascript title="data/GameManager.js — resetCheat"
+resetCheat() {
+    this.functions.resetCheat();
+}
+```
+
+Use `resetCheat()` before re-applying a new set of cheats, or to give the player a clean state:
+
+```javascript title="Reset all cheats"
+window.EJS_emulator.gameManager.resetCheat();
+```
+
+<Tip>
+  Call `resetCheat()` followed by individual `setCheat()` calls to atomically swap the active cheat set without leaving stale codes active from a previous session.
+</Tip>
+
+---
+
+## GLSL Shaders
+
+EmulatorJS supports custom GLSL shaders that run as a post-processing pass over the rendered video output. Shaders are written into the WebAssembly virtual filesystem at startup and can be toggled on and off at runtime.
+
+### Providing Shaders with `EJS_SHADERS`
+
+`window.EJS_SHADERS` is a plain object whose keys are shader filenames (used as keys in the Settings → Shader menu) and whose values are GLSL source strings. Set it before loading `loader.js`:
+
+```html title="ROM page — custom GLSL shader"
+<script type="text/javascript">
+  EJS_player        = '#game';
+  EJS_core          = 'snes';
+  EJS_gameUrl       = '/gdata/my-rom.sfc';
+  EJS_pathtodata    = 'data/';
+  EJS_startOnLoaded = false;
+
+  window.EJS_SHADERS = {
+    "crt-scanline.glslp": `
+      #version 110
+      uniform sampler2D Texture;
+      varying vec2 tex_coord;
+
+      void main() {
+          vec4 color = texture2D(Texture, tex_coord);
+          // Dim every other horizontal line to simulate CRT scanlines
+          float line = floor(mod(gl_FragCoord.y, 2.0));
+          color.rgb *= mix(0.6, 1.0, line);
+          gl_FragColor = color;
+      }
+    `
+  };
+</script>
+<script src="data/loader.js"></script>
+```
+
+<Warning>
+  When `EJS_SHADERS` is defined, the Settings panel replaces the built-in shader selector with your custom shaders. The built-in presets (`crt-easymode.glslp`, `crt-aperture.glslp`, etc.) are only available when `EJS_SHADERS` is **not** set.
+</Warning>
+
+### How Shaders Are Loaded — `initShaders()`
+
+When `EJS_GameManager` is constructed (after the WASM module finishes loading), it calls `initShaders()`. This method checks for `window.EJS_SHADERS` and writes each shader source into the `/shader/` directory of the virtual filesystem:
+
+```javascript title="data/GameManager.js — initShaders (excerpt)"
+initShaders() {
+    if (!window.EJS_SHADERS) return;
+    this.mkdir("/shader");
+    for (const shader in window.EJS_SHADERS) {
+        this.FS.writeFile('/shader/' + shader, window.EJS_SHADERS[shader]);
+    }
+}
+```
+
+The virtual `/shader/` path is where RetroArch looks for GLSL preset files. Each key in `EJS_SHADERS` becomes a file at `/shader/<key>`.
+
+### Activating a Shader — `menuOptionChanged` and `toggleShader`
+
+When the user picks a shader from the Settings menu, `emulator.js` writes the selected shader's source to `/shader/shader.glslp` (a fixed filename that RetroArch monitors) and calls `toggleShader(1)`:
+
+```javascript title="data/emulator.js — shader activation (excerpt)"
+if (option === "shader") {
+    try {
+        this.Module.FS.unlink("/shader/shader.glslp");
+    } catch(e) {}
+    if (value === "disabled") {
+        this.gameManager.toggleShader(0);
+        return;
+    }
+    this.Module.FS.writeFile("/shader/shader.glslp", window.EJS_SHADERS[value]);
+    this.gameManager.toggleShader(1);
+    return;
+}
+```
+
+#### `toggleShader(active)`
+
+Enables or disables the shader pipeline in the WebAssembly core. Wraps the `shader_enable` export:
+
+```javascript title="data/GameManager.js — toggleShader"
+toggleShader(active) {
+    this.functions.toggleShader(active);
+}
+```
+
+<ParamField path="active" type="number" required>
+  Pass `1` to enable shaders, `0` to disable and restore unfiltered output.
+</ParamField>
+
+To activate a shader programmatically after the game has started, write the GLSL source to the virtual FS and call `toggleShader`:
+
+```javascript title="Programmatic shader activation after game start"
+window.EJS_onGameStart = function() {
+    const gm = window.EJS_emulator.gameManager;
+
+    // Write shader source to the monitored path
+    window.EJS_emulator.Module.FS.writeFile(
+        "/shader/shader.glslp",
+        window.EJS_SHADERS["crt-scanline.glslp"]
+    );
+
+    // Enable the shader pipeline
+    gm.toggleShader(1);
+};
+```
+
+### Shader Menu Integration
+
+When `window.EJS_SHADERS` is defined the engine adds a **Shaders** option to the Settings menu automatically:
+
+```javascript title="data/emulator.js — shader menu entry (excerpt)"
+if (window.EJS_SHADERS) {
+    addToMenu(this.localization('Shaders'), 'shader', {
+        'disabled':           this.localization("Disabled"),
+        '2xScaleHQ.glslp':    this.localization("2xScaleHQ"),
+        '4xScaleHQ.glslp':    this.localization("4xScaleHQ"),
+        'crt-easymode.glslp': this.localization('CRT easymode'),
+        'crt-aperture.glslp': this.localization('CRT aperture'),
+        'crt-geom.glslp':     this.localization('CRT geom'),
+        'crt-mattias.glslp':  this.localization('CRT mattias')
+    }, 'disabled');
+}
+```
+
+Every key in your `EJS_SHADERS` object should match one of the keys the menu will reference. Shaders only take effect after the emulator core has fully started — they cannot be applied during the loading screen.
+
+### GLSL Shader Tips
+
+<Accordion title="What GLSL version should I target?">
+  EmulatorJS runs via WebAssembly compiled from RetroArch's libretro backend. Use GLSL `#version 110` (GLSL ES 1.00 compatible syntax) for maximum compatibility across browsers. Avoid features from `#version 300 es` or higher unless you have tested them in your target browsers.
+</Accordion>
+
+<Accordion title="Can I load shaders from external .glsl files?">
+  `EJS_SHADERS` values must be inline strings — there is no built-in mechanism to fetch external `.glsl` files. To load from a URL, `fetch()` the file yourself before setting `EJS_SHADERS`, then pass the response text as the value. Do this before the `<script src="data/loader.js">` tag executes.
+</Accordion>
+
+<Accordion title="Why does my shader not appear in the Settings menu?">
+  The shader menu is only rendered when `window.EJS_SHADERS` is a non-null object at the time the settings panel is first built. Ensure you set `EJS_SHADERS` before `loader.js` runs, not inside a `DOMContentLoaded` or `onGameStart` callback.
+</Accordion>

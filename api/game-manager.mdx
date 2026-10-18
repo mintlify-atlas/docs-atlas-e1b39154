@@ -1,0 +1,470 @@
+---
+title: "EJS_GameManager: Emulator Control Methods Reference"
+sidebarTitle: "GameManager"
+description: "Complete method reference for the EJS_GameManager class — covering save states, save files, playback controls, input simulation, cheats, rendering, core options, and multi-disc."
+---
+
+`EJS_GameManager` is the runtime control layer that sits between your JavaScript and the compiled WebAssembly core. It is instantiated internally by `EmulatorJS` once the core has finished loading, and is exposed at `window.EJS_emulator.gameManager`. Every method it exposes is a thin wrapper around a corresponding C function exported from the LibRetro core via Emscripten's `cwrap`. Save files are persisted through IDBFS — a filesystem layer mounted at `/data/saves` and synced to IndexedDB — so progress survives page reloads automatically.
+
+<Note>
+`gameManager` is only available **after** the `"start"` event fires. Accessing it before the core has loaded will return `undefined`.
+</Note>
+
+```js title="Safe access pattern"
+window.EJS_emulator.on("start", () => {
+    const gm = window.EJS_emulator.gameManager;
+    // Safe to call any method here
+    console.log("Supports states:", gm.supportsStates());
+});
+```
+
+---
+
+## State Management
+
+Save states capture the complete machine state at a moment in time and can be restored later. Not all cores support states; always check `supportsStates()` first.
+
+### `supportsStates()`
+
+Returns `true` if the currently running core supports save states, `false` otherwise. This calls the `supports_states` C export and coerces the numeric return to a boolean.
+
+```js
+if (window.EJS_emulator.gameManager.supportsStates()) {
+    await window.EJS_emulator.gameManager.quickSave(1);
+}
+```
+
+---
+
+### `getState()`
+
+Reads the current machine state from WebAssembly memory and returns it as a `Promise<Uint8Array>`. Internally calls `save_state_info` to trigger the core to serialise its state, then polls every 50 ms until the data pointer is populated, copies the bytes out, and resolves.
+
+```js title="Export a state to a file"
+const stateBytes = await window.EJS_emulator.gameManager.getState();
+const blob = new Blob([stateBytes], { type: "application/octet-stream" });
+const url = URL.createObjectURL(blob);
+const a = document.createElement("a");
+a.href = url;
+a.download = "my-save.state";
+a.click();
+```
+
+---
+
+### `loadState(state)`
+
+Writes `state` into the virtual filesystem as `/game.state`, instructs the core to load it via `load_state`, then schedules deletion of the temporary file after 5 seconds.
+
+<ParamField path="state" type="Uint8Array" required>
+  Raw state bytes previously obtained from `getState()` or loaded from a `.state` file.
+</ParamField>
+
+```js title="Restore a state from an uploaded file"
+fileInput.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    window.EJS_emulator.gameManager.loadState(bytes);
+});
+```
+
+---
+
+### `quickSave(slot?)`
+
+Saves the current state to a named slot file `{slot}-quick.state` in the virtual filesystem. Slot numbers range from `1` to `9`.
+
+<ParamField path="slot" type="number">
+  Slot number (1–9). Defaults to `1` if omitted or falsy.
+</ParamField>
+
+```js
+// Save to slot 3
+window.EJS_emulator.gameManager.quickSave(3);
+```
+
+---
+
+### `quickLoad(slot?)`
+
+Loads the state previously saved to slot `{slot}-quick.state`. The file must exist in the virtual filesystem (i.e. `quickSave` must have been called in this session, or the state must have been placed into the FS manually).
+
+<ParamField path="slot" type="number">
+  Slot number (1–9). Defaults to `1` if omitted or falsy.
+</ParamField>
+
+```js
+window.EJS_emulator.gameManager.quickLoad(3);
+```
+
+---
+
+## Save Files
+
+Save files (SRAM, EEPROM, memory cards) are persisted separately from save states. They are stored in IDBFS at `/data/saves` and survive browser sessions.
+
+### `getSaveFilePath()`
+
+Returns the absolute virtual filesystem path of the current save file (e.g. `/data/saves/my-game.srm`). The path is determined by the core via the `save_file_path` C export.
+
+```js
+const path = window.EJS_emulator.gameManager.getSaveFilePath();
+console.log("Save file at:", path);
+```
+
+---
+
+### `getSaveFile()`
+
+Calls `saveSaveFiles()` to flush in-memory save data, then reads and returns the save file bytes. Returns `null` if no save file exists at the path reported by `getSaveFilePath()`.
+
+```js title="Download the save file"
+const bytes = window.EJS_emulator.gameManager.getSaveFile();
+if (bytes) {
+    const blob = new Blob([bytes], { type: "application/octet-stream" });
+    const a = Object.assign(document.createElement("a"), {
+        href: URL.createObjectURL(blob),
+        download: "save.srm"
+    });
+    a.click();
+}
+```
+
+---
+
+### `saveSaveFiles()`
+
+Calls the core's `cmd_savefiles` export to flush SRAM/EEPROM to IDBFS, then calls `FS.syncfs(false, ...)` to commit the IDBFS layer to IndexedDB. This is also called automatically on the `beforeunload` window event.
+
+```js
+window.EJS_emulator.gameManager.saveSaveFiles();
+```
+
+---
+
+### `loadSaveFiles()`
+
+Calls `refresh_save_files` on the core, causing it to re-read save file contents from the IDBFS filesystem into its internal memory. Useful after programmatically writing a save file into the FS.
+
+```js
+window.EJS_emulator.gameManager.loadSaveFiles();
+```
+
+---
+
+## Playback Controls
+
+### `restart()`
+
+Calls the `system_restart` C export, hard-resetting the emulated console to its power-on state. The current ROM remains loaded.
+
+```js
+window.EJS_emulator.gameManager.restart();
+```
+
+---
+
+### `toggleMainLoop(playing)`
+
+Pauses (`0`) or resumes (`1`) the main emulation loop by calling `toggleMainLoop` on the Module.
+
+<ParamField path="playing" type="number" required>
+  Pass `0` to pause, `1` to resume.
+</ParamField>
+
+```js
+// Pause
+window.EJS_emulator.gameManager.toggleMainLoop(0);
+// Resume
+window.EJS_emulator.gameManager.toggleMainLoop(1);
+```
+
+---
+
+### `toggleFastForward(active)`
+
+Enables (`1`) or disables (`0`) fast-forward mode, which runs the emulation loop faster than real-time at the ratio set by `setFastForwardRatio`. The default ratio is `3.0×` as set in `retroarch.cfg`.
+
+<ParamField path="active" type="number" required>
+  `1` to enable fast-forward, `0` to disable.
+</ParamField>
+
+```js
+window.EJS_emulator.gameManager.toggleFastForward(1);
+```
+
+---
+
+### `setFastForwardRatio(ratio)`
+
+Sets the fast-forward speed multiplier. The default configured in `getRetroArchCfg()` is `3.0`.
+
+<ParamField path="ratio" type="number" required>
+  Speed multiplier. `2.0` = double speed, `5.0` = five times speed.
+</ParamField>
+
+```js
+window.EJS_emulator.gameManager.setFastForwardRatio(5.0);
+window.EJS_emulator.gameManager.toggleFastForward(1);
+```
+
+---
+
+### `toggleRewind(active)`
+
+Enables (`1`) or disables (`0`) the rewind buffer. Rewind must have been enabled at construction time via `window.EJS_rewindEnabled` (which sets `rewind_enable = true` in `retroarch.cfg`). Calling this when rewind is disabled is a no-op.
+
+<ParamField path="active" type="number" required>
+  `1` to start rewinding, `0` to stop.
+</ParamField>
+
+---
+
+### `setRewindGranularity(value)`
+
+Sets how many frames apart each rewind snapshot is. Larger values use less memory but make rewinding coarser. The default is `6` frames.
+
+<ParamField path="value" type="number" required>
+  Frame interval between rewind snapshots.
+</ParamField>
+
+```js
+window.EJS_emulator.gameManager.setRewindGranularity(2); // Finer rewind
+```
+
+---
+
+### `toggleSlowMotion(active)`
+
+Enables (`1`) or disables (`0`) slow-motion mode. The slow-motion ratio defaults to `3.0` (one third speed).
+
+<ParamField path="active" type="number" required>
+  `1` to enable slow motion, `0` to disable.
+</ParamField>
+
+---
+
+### `setSlowMotionRatio(ratio)`
+
+Sets the slow-motion divisor. The emulation runs at `1/ratio` speed. Default is `3.0` (set in `retroarch.cfg`).
+
+<ParamField path="ratio" type="number" required>
+  Speed divisor. `3.0` = one-third speed, `2.0` = half speed.
+</ParamField>
+
+```js
+window.EJS_emulator.gameManager.setSlowMotionRatio(4.0);
+window.EJS_emulator.gameManager.toggleSlowMotion(1);
+```
+
+---
+
+## Input
+
+### `simulateInput(player, index, value)`
+
+Injects a virtual button or axis event into the emulator for the given player. When netplay is active, input is routed through the netplay channel instead of being applied locally.
+
+<ParamField path="player" type="number" required>
+  Zero-based player index (0 = Player 1, 1 = Player 2, …).
+</ParamField>
+
+<ParamField path="index" type="number" required>
+  Button index. Standard gamepad buttons follow the RetroPad layout. Indices **24–29** are reserved for emulator-level actions (see table below).
+</ParamField>
+
+<ParamField path="value" type="number" required>
+  `1` for press/activate, `0` for release/deactivate.
+</ParamField>
+
+**Reserved special indices:**
+
+| Index | Action |
+|-------|--------|
+| 24 | Quick save to current slot (triggers `quickSave` + on-screen message) |
+| 25 | Quick load from current slot (triggers `quickLoad` + on-screen message) |
+| 26 | Increment current save-state slot (wraps 1→9) |
+| 27 | Toggle fast-forward |
+| 28 | Toggle rewind |
+| 29 | Toggle slow motion |
+
+```js title="Simulate a Start button press for Player 1"
+const gm = window.EJS_emulator.gameManager;
+// RetroPad START = index 3 for most cores
+gm.simulateInput(0, 3, 1); // press
+setTimeout(() => gm.simulateInput(0, 3, 0), 100); // release after 100ms
+```
+
+```js title="Trigger a quick save via simulateInput"
+gm.simulateInput(0, 24, 1); // writes slot, shows "SAVED STATE TO SLOT 1"
+```
+
+---
+
+## Cheats
+
+### `setCheat(index, enabled, code)`
+
+Adds or updates a cheat entry at the given index. Calls the `set_cheat` C export.
+
+<ParamField path="index" type="number" required>
+  Zero-based cheat slot index.
+</ParamField>
+
+<ParamField path="enabled" type="number" required>
+  `1` to enable the cheat, `0` to disable it.
+</ParamField>
+
+<ParamField path="code" type="string" required>
+  Cheat code string in the format expected by the active core (Game Genie, Game Shark, etc.).
+</ParamField>
+
+```js
+const gm = window.EJS_emulator.gameManager;
+gm.setCheat(0, 1, "AABBCCDD"); // Enable cheat in slot 0
+gm.setCheat(1, 0, "EEFF0011"); // Add cheat in slot 1, but leave it disabled
+```
+
+---
+
+### `resetCheat()`
+
+Clears all cheat codes by calling the `reset_cheat` C export.
+
+```js
+window.EJS_emulator.gameManager.resetCheat();
+```
+
+---
+
+## Rendering
+
+### `screenshot()`
+
+Triggers the `cmd_take_screenshot` C export, which writes a PNG to the virtual filesystem at `/screenshot.png`, then immediately reads and returns the bytes as a `Uint8Array`.
+
+```js title="Save a screenshot to disk"
+const png = window.EJS_emulator.gameManager.screenshot();
+const blob = new Blob([png], { type: "image/png" });
+const a = Object.assign(document.createElement("a"), {
+    href: URL.createObjectURL(blob),
+    download: "screenshot.png"
+});
+a.click();
+```
+
+---
+
+### `toggleShader(active)`
+
+Enables (`1`) or disables (`0`) the GLSL shader loaded from the `/shader/` directory. Shaders must be pre-written into the virtual filesystem via `window.EJS_SHADERS` before the `GameManager` is constructed.
+
+<ParamField path="active" type="number" required>
+  `1` to enable the shader, `0` to disable it.
+</ParamField>
+
+```js
+window.EJS_emulator.gameManager.toggleShader(1);
+```
+
+---
+
+## Core Options
+
+### `getCoreOptions()`
+
+Returns a JSON string describing all available core options and their possible values, as reported by the `get_core_options` C export. Parse it to build a dynamic settings UI.
+
+```js title="Log available core options"
+const json = window.EJS_emulator.gameManager.getCoreOptions();
+const options = JSON.parse(json);
+console.table(options);
+```
+
+---
+
+### `setVariable(option, value)`
+
+Sets a core option variable at runtime, immediately taking effect without restarting the core. Calls the `set_variable` C export.
+
+<ParamField path="option" type="string" required>
+  The option key, e.g. `"snes9x_overclock_cycles"`.
+</ParamField>
+
+<ParamField path="value" type="string" required>
+  The new value as a string, e.g. `"enabled"`.
+</ParamField>
+
+```js
+window.EJS_emulator.gameManager.setVariable("snes9x_overclock_cycles", "enabled");
+```
+
+---
+
+## Multi-Disc
+
+Some games (particularly PlayStation titles) span multiple discs. Use these methods to switch between them without restarting.
+
+### `getDiskCount()`
+
+Returns the total number of discs in the loaded game. Returns `0` if the core does not support multi-disc.
+
+### `getCurrentDisk()`
+
+Returns the zero-based index of the currently inserted disc.
+
+### `setCurrentDisk(disk)`
+
+Ejects the current disc and inserts disc at `disk` index. The game must support disc swapping (most PSX multi-disc games do, triggered via an in-game prompt).
+
+<ParamField path="disk" type="number" required>
+  Zero-based disc index to switch to.
+</ParamField>
+
+```js title="Switch to disc 2 of a multi-disc PSX game"
+const gm = window.EJS_emulator.gameManager;
+const total = gm.getDiskCount();
+console.log(`Disc ${gm.getCurrentDisk() + 1} of ${total}`);
+
+if (total > 1) {
+    gm.setCurrentDisk(1); // Insert disc 2
+}
+```
+
+---
+
+## Complete Example
+
+```js title="Full gameManager integration example"
+window.EJS_emulator.on("start", async () => {
+    const gm = window.EJS_emulator.gameManager;
+
+    if (!gm.supportsStates()) {
+        console.warn("This core does not support save states.");
+        return;
+    }
+
+    // Configure fast-forward
+    gm.setFastForwardRatio(4.0);
+
+    // Enable a cheat
+    gm.setCheat(0, 1, "AABB-CCDD");
+
+    // After 10 seconds, quick-save to slot 2
+    setTimeout(() => {
+        gm.quickSave(2);
+        console.log("State saved to slot 2");
+    }, 10000);
+
+    // Export the save file when the user clicks a button
+    document.getElementById("export-save").addEventListener("click", () => {
+        const file = gm.getSaveFile();
+        if (!file) { alert("No save file yet."); return; }
+        const a = Object.assign(document.createElement("a"), {
+            href: URL.createObjectURL(new Blob([file])),
+            download: "save.srm"
+        });
+        a.click();
+    });
+});
+```

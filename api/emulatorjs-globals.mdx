@@ -1,0 +1,408 @@
+---
+title: "EmulatorJS Global Variables and Initialization API"
+sidebarTitle: "Globals"
+description: "Reference for all EJS_* global variables, the EmulatorJS constructor, instance methods, the storage system, and the window.EJS_emulator entry point."
+---
+
+After `loader.js` finishes its async bootstrap sequence it constructs a single `EmulatorJS` instance, assigns it to `window.EJS_emulator`, and wires every `EJS_*` global variable you declared on the page into that instance's configuration object. Everything the emulator does—downloading cores, handling input, persisting saves—flows through this one object. Understanding the globals that feed the constructor and the methods available on the resulting instance is the foundation for any advanced integration with EmulatorOS.
+
+## How `loader.js` Bootstraps the Instance
+
+`loader.js` is an IIFE that runs automatically when included via `<script src="data/loader.js">`. It reads all `window.EJS_*` globals present at that moment, assembles a `config` object, and then calls:
+
+```js title="loader.js — final bootstrap lines"
+window.EJS_emulator = new EmulatorJS(EJS_player, config);
+window.EJS_adBlocked = (url, del) => window.EJS_emulator.adBlocked(url, del);
+
+if (typeof window.EJS_ready === "function") {
+    window.EJS_emulator.on("ready", window.EJS_ready);
+}
+if (typeof window.EJS_onGameStart === "function") {
+    window.EJS_emulator.on("start", window.EJS_onGameStart);
+}
+if (typeof window.EJS_onLoadState === "function") {
+    window.EJS_emulator.on("load", window.EJS_onLoadState);
+}
+if (typeof window.EJS_onSaveState === "function") {
+    window.EJS_emulator.on("save", window.EJS_onSaveState);
+}
+```
+
+`EJS_player` must be a valid CSS selector string pointing to the container element (e.g., `"#game"`). All other behaviour is driven by the globals listed below.
+
+---
+
+## Global Configuration Variables
+
+Declare any of these as `window` properties **before** `loader.js` is included. They map directly to fields on the internal `config` object.
+
+<ParamField path="EJS_gameUrl" type="string" required>
+  URL or path to the ROM file. Supports plain URLs, `blob:` URLs, and direct `ArrayBuffer` / `Uint8Array` / `Blob` values.
+</ParamField>
+
+<ParamField path="EJS_core" type="string" required>
+  The emulation system to use. Must match one of the `EJS_core` values in the [Supported Systems](/api/supported-systems) table (e.g. `"nes"`, `"snes"`, `"psx"`).
+</ParamField>
+
+<ParamField path="EJS_player" type="string" required>
+  CSS selector for the container element that will host the emulator canvas (e.g. `"#game"`).
+</ParamField>
+
+<ParamField path="EJS_pathtodata" type="string">
+  Base path to the `data/` directory. Defaults to the directory containing `loader.js` as inferred from `document.currentScript.src`.
+</ParamField>
+
+<ParamField path="EJS_biosUrl" type="string">
+  URL to a BIOS file required by cores such as `pcsx_rearmed` (PSX), `melonds` (NDS), or `opera` (3DO).
+</ParamField>
+
+<ParamField path="EJS_gameName" type="string">
+  Human-readable game title shown in the UI and used to name save files.
+</ParamField>
+
+<ParamField path="EJS_color" type="string">
+  Hex colour (e.g. `"#1aaff0"`) used as the primary accent colour throughout the emulator UI. Defaults to `#1aaff0`.
+</ParamField>
+
+<ParamField path="EJS_startOnLoaded" type="boolean">
+  When `true`, the emulator skips the "Start Game" button and begins loading immediately. Defaults to `false`.
+</ParamField>
+
+<ParamField path="EJS_fullscreenOnLoaded" type="boolean">
+  When `true`, enters fullscreen automatically when the game starts. Defaults to `false`.
+</ParamField>
+
+<ParamField path="EJS_loadStateURL" type="string">
+  URL to a `.state` file to restore immediately after the game starts.
+</ParamField>
+
+<ParamField path="EJS_gamePatchUrl" type="string">
+  URL to an IPS/UPS/BPS patch file to apply to the ROM on load.
+</ParamField>
+
+<ParamField path="EJS_gameParentUrl" type="string">
+  URL to a parent ROM archive (used with arcade cores that require a parent ROM set).
+</ParamField>
+
+<ParamField path="EJS_volume" type="number">
+  Initial volume level between `0` (muted) and `1` (full). Defaults to `0.5`.
+</ParamField>
+
+<ParamField path="EJS_defaultControls" type="object">
+  Default controller button mapping to pre-configure instead of the built-in defaults.
+</ParamField>
+
+<ParamField path="EJS_cheats" type="array">
+  Array of `[description, code]` pairs to pre-load into the cheat engine, e.g. `[["Infinite Lives", "AABBCC"]]`.
+</ParamField>
+
+<ParamField path="EJS_defaultOptions" type="object">
+  Default values for core options (overrides RetroArch defaults).
+</ParamField>
+
+<ParamField path="EJS_language" type="string">
+  BCP 47 locale tag such as `"zh-CN"` or `"pt-BR"`. When set, `loader.js` fetches `data/localization/{locale}.json` before constructing the instance.
+</ParamField>
+
+<ParamField path="EJS_paths" type="object">
+  Override map from filename to full URL. Any internal `downloadFile` call whose filename matches a key here will fetch from the mapped URL instead.
+</ParamField>
+
+<ParamField path="EJS_backgroundImage" type="string">
+  URL of a background image shown behind the Start button before the game loads.
+</ParamField>
+
+<ParamField path="EJS_backgroundBlur" type="boolean">
+  When `true`, applies a CSS blur to the background image.
+</ParamField>
+
+<ParamField path="EJS_backgroundColor" type="string">
+  CSS colour string for the background behind the canvas. Defaults to `"rgb(51, 51, 51)"`.
+</ParamField>
+
+<ParamField path="EJS_alignStartButton" type="string">
+  Vertical alignment of the Start button: `"top"`, `"center"`, or `"bottom"` (default).
+</ParamField>
+
+<ParamField path="EJS_CacheLimit" type="number">
+  Maximum number of bytes to keep in the ROM/core cache.
+</ParamField>
+
+<ParamField path="EJS_netplayServer" type="string">
+  WebSocket URL for the netplay server. Defaults to `"https://netplay.emulatorjs.org"`.
+</ParamField>
+
+<ParamField path="EJS_gameID" type="string | number">
+  Unique identifier for this game used by the netplay and leaderboard subsystems.
+</ParamField>
+
+<ParamField path="EJS_controlScheme" type="string">
+  Named control scheme to apply (core-specific).
+</ParamField>
+
+<ParamField path="EJS_VirtualGamepadSettings" type="object">
+  Configuration object for the on-screen virtual gamepad (touch overlay).
+</ParamField>
+
+<ParamField path="EJS_Buttons" type="object">
+  Show/hide individual UI buttons, e.g. `{ mute: false, settings: true }`.
+</ParamField>
+
+<ParamField path="EJS_AdUrl" type="string">
+  URL for an ad iframe to display before the game starts.
+</ParamField>
+
+<ParamField path="EJS_AdMode" type="number">
+  Ad display mode: `0` = no skip, `1` = skippable, `2` = timed skip. Defaults to `2`.
+</ParamField>
+
+<ParamField path="EJS_AdTimer" type="number">
+  Seconds before the ad can be skipped (used when `EJS_AdMode = 2`).
+</ParamField>
+
+<ParamField path="EJS_AdSize" type="array">
+  Two-element array of CSS size strings for the ad iframe, e.g. `["300px", "250px"]`.
+</ParamField>
+
+### Callback Globals
+
+These are convenience wrappers. Setting them before `loader.js` runs is equivalent to calling `window.EJS_emulator.on(event, fn)` directly.
+
+<ParamField path="EJS_ready" type="function">
+  Called when the emulator UI is fully rendered and the Start button is visible. Wired to the `"ready"` event.
+</ParamField>
+
+<ParamField path="EJS_onGameStart" type="function">
+  Called when the game actually begins running inside the WebAssembly core. Wired to the `"start"` event.
+</ParamField>
+
+<ParamField path="EJS_onLoadState" type="function">
+  Called when a save state is loaded. Wired to the `"load"` event.
+</ParamField>
+
+<ParamField path="EJS_onSaveState" type="function">
+  Called when a save state is written. Wired to the `"save"` event.
+</ParamField>
+
+---
+
+## `EmulatorJS` Constructor
+
+```js title="Constructor signature"
+new EmulatorJS(player, config)
+```
+
+<ParamField path="player" type="string" required>
+  CSS selector string for the host container element, e.g. `"#game"`. The element's `innerHTML` is cleared and replaced with the emulator layout.
+</ParamField>
+
+<ParamField path="config" type="object" required>
+  Configuration object whose keys correspond to the `EJS_*` globals above (without the `EJS_` prefix and in camelCase). `loader.js` assembles this from the page-level globals automatically.
+</ParamField>
+
+### Version Field
+
+```js
+window.EJS_emulator.version // → 7
+```
+
+The integer `version` class field on `EmulatorJS` increments each time the bundled emulator cores are updated. Use it to detect whether a cached core bundle is stale.
+
+---
+
+## Instance Methods
+
+### `on(event, func)`
+
+Registers a callback for a named lifecycle event. Multiple callbacks for the same event are supported and are called in registration order.
+
+```js title="Registering event listeners"
+const emu = window.EJS_emulator;
+
+emu.on("ready", () => {
+    console.log("UI ready — start button is visible");
+});
+
+emu.on("start", () => {
+    console.log("Game is running inside the WebAssembly core");
+});
+```
+
+See the [Events](/api/events) page for all available event names and their payloads.
+
+---
+
+### `getCore(generic?)`
+
+Returns the resolved internal core name for the currently configured system.
+
+<ParamField path="generic" type="boolean">
+  When `true`, returns the generic family name (e.g. `"sega"`, `"n64"`, `"psx"`) rather than the specific core filename. When `false` or omitted, returns the exact LibRetro core name (e.g. `"genesis_plus_gx"`, `"mupen64plus_next"`).
+</ParamField>
+
+```js title="getCore examples"
+// EJS_core = "snes"
+window.EJS_emulator.getCore()         // → "snes9x"
+window.EJS_emulator.getCore(true)     // → "snes"
+
+// EJS_core = "segaMD"
+window.EJS_emulator.getCore()         // → "genesis_plus_gx"
+window.EJS_emulator.getCore(true)     // → "sega"
+```
+
+<Note>
+On Safari for iOS/iPadOS, `getCore()` automatically returns `"parallel_n64"` instead of `"mupen64plus_next"` when the system is `"n64"`, because mupen64plus_next is not compatible with Safari's WebAssembly threading model on mobile.
+</Note>
+
+---
+
+### `extensions`
+
+A plain object mapping each internal core name to an array of supported ROM file extensions. Useful for building file-picker `accept` filters.
+
+```js title="extensions map (excerpt from emulator.js)"
+this.extensions = {
+    'fceumm':          ['fds', 'nes', 'unif', 'unf'],
+    'snes9x':          ['smc', 'sfc', 'swc', 'fig', 'bs', 'st'],
+    'mupen64plus_next':['n64', 'v64', 'z64', 'bin', 'u1', 'ndd', 'gb'],
+    'gambatte':        ['gb', 'gbc', 'dmg'],
+    'mgba':            ['gb', 'gbc', 'gba'],
+    'melonds':         ['nds'],
+    'pcsx_rearmed':    ['bin', 'cue', 'img', 'mdf', 'pbp', 'toc', 'cbn', 'm3u', 'ccd'],
+    'ppsspp':          ['elf', 'iso', 'cso', 'prx', 'pbp'],
+    'genesis_plus_gx': ['m3u', 'mdx', 'md', 'smd', 'gen', 'bin', 'cue', 'iso', 'chd',
+                        'bms', 'sms', 'gg', 'sg', '68k', 'sgd'],
+    // ... (see full table in Supported Systems)
+}
+```
+
+```js title="Build an <input> accept string for the active core"
+const core = window.EJS_emulator.getCore();
+const exts = window.EJS_emulator.extensions[core] || [];
+const accept = exts.map(e => "." + e).join(",");
+document.querySelector("#rom-input").accept = accept;
+```
+
+---
+
+### `localization(text)`
+
+Looks up `text` in the loaded language JSON and returns the translated string, or the original `text` if no translation exists.
+
+```js
+window.EJS_emulator.localization("Start Game"); // → "游戏开始" (when zh-CN is active)
+```
+
+<Tip>
+Missing keys are collected in `window.EJS_missingLang` (an array) so you can audit gaps in a custom translation file without scanning the console manually.
+</Tip>
+
+---
+
+### `checkCompression(data, msg, fileCbFunc?)`
+
+Inspects the magic bytes of `data` and decompresses it using a Web Worker if it is a `.zip`, `.7z`, or `.rar` archive. Returns a `Promise` that resolves to an object mapping filenames to `Uint8Array` contents.
+
+<ParamField path="data" type="Uint8Array" required>
+  Raw bytes to inspect and potentially decompress.
+</ParamField>
+
+<ParamField path="msg" type="string" required>
+  Progress label displayed in the loading text element while decompression is in progress (e.g. `"Decompress Game Data"`).
+</ParamField>
+
+<ParamField path="fileCbFunc" type="function">
+  Optional per-file callback `(fileName, fileData)` called as each file is extracted, instead of accumulating all files before resolving.
+</ParamField>
+
+```js title="Manual decompression example"
+const response = await fetch("/roms/game.zip");
+const bytes = new Uint8Array(await response.arrayBuffer());
+
+const files = await window.EJS_emulator.checkCompression(bytes, "Extracting ROM...");
+// files → { "game.nes": Uint8Array([...]) }
+```
+
+---
+
+### `downloadFile(path, cb, progressCB, notWithPath, opts)`
+
+Internal HTTP utility used throughout the EmulatorJS codebase. Wraps `XMLHttpRequest` with automatic fallback to `fetch` for `blob:` and non-HTTP URLs. Handles `ArrayBuffer`, `Uint8Array`, and `Blob` inputs transparently via `toData()`.
+
+<ParamField path="path" type="string" required>
+  Relative path (resolved against `config.dataPath`) or an absolute URL. If `config.filePaths` contains a matching key, that URL is used instead.
+</ParamField>
+
+<ParamField path="cb" type="function" required>
+  Completion callback receiving `{ data, headers }` on success or `-1` on error.
+</ParamField>
+
+<ParamField path="progressCB" type="function">
+  Called with a human-readable progress string (e.g. `" 42%"` or `" 1.20MB"`) during the download.
+</ParamField>
+
+<ParamField path="notWithPath" type="boolean">
+  When `true`, `config.dataPath` is not prepended — `path` is used as-is.
+</ParamField>
+
+<ParamField path="opts" type="object" required>
+  XHR options object. Relevant keys: `method` (`"GET"` | `"HEAD"`), `responseType` (`"arraybuffer"` | `"text"`).
+</ParamField>
+
+---
+
+## Internal Storage System (`EJS_STORAGE`)
+
+The constructor creates four `EJS_STORAGE` namespaces backed by IndexedDB, accessible as `window.EJS_emulator.storage`:
+
+```js title="Storage namespaces (from emulator.js constructor)"
+this.storage = {
+    rom:    new window.EJS_STORAGE("EmulatorJS-roms",   "rom"),
+    bios:   new window.EJS_STORAGE("EmulatorJS-bios",  "bios"),
+    core:   new window.EJS_STORAGE("EmulatorJS-core",  "core"),
+    states: new window.EJS_STORAGE("EmulatorJS-states","states")
+}
+```
+
+<Accordion title="Storage namespace descriptions">
+  | Namespace | DB Name | Store Key | Purpose |
+  |---|---|---|---|
+  | `rom` | `EmulatorJS-roms` | `rom` | Caches downloaded ROM bytes to avoid re-fetching on page reload |
+  | `bios` | `EmulatorJS-bios` | `bios` | Caches BIOS files (PSX, NDS, etc.) |
+  | `core` | `EmulatorJS-core` | `core` | Caches the compiled `.wasm` + `.data` core bundle |
+  | `states` | `EmulatorJS-states` | `states` | Persists quick-save state slots across sessions |
+</Accordion>
+
+<Warning>
+Clearing site data in the browser wipes all four stores. If you rely on cached ROMs or states for offline play, ensure your service worker strategy accounts for this.
+</Warning>
+
+---
+
+## Minimal Setup Example
+
+```html title="Minimal EmulatorOS game page"
+<!DOCTYPE html>
+<html>
+<head>
+  <title>My Game</title>
+</head>
+<body>
+  <div id="game" style="width:800px;height:600px;"></div>
+
+  <script>
+    // All EJS_* globals must be set before loader.js runs
+    window.EJS_player    = "#game";
+    window.EJS_core      = "snes";
+    window.EJS_gameUrl   = "/roms/my-game.sfc";
+    window.EJS_pathtodata = "/data/";
+    window.EJS_startOnLoaded = true;
+
+    window.EJS_onGameStart = function() {
+      console.log("Game started!", window.EJS_emulator.getCore()); // "snes9x"
+    };
+  </script>
+  <script src="/data/loader.js"></script>
+</body>
+</html>
+```

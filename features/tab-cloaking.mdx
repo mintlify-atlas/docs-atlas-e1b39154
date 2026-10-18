@@ -1,0 +1,99 @@
+---
+title: "Tab Cloaking: Hide EmulatorOS with Custom Titles"
+sidebarTitle: "Tab Cloaking"
+description: "Change the browser tab title and favicon to any text or image URL, disguising the EmulatorOS page. Settings persist in localStorage across reloads."
+---
+
+Tab cloaking lets users replace the browser tab's visible title and favicon with anything they choose — a generic productivity site name, a blank label, or any icon URL. The substitution happens instantly on every page load via `main.js`, which runs before the rest of the page renders. Because the values are stored in `localStorage`, the cloak survives navigation, refreshes, and even closing and reopening the tab.
+
+## How It Works
+
+`main.js` is loaded by every page on EmulatorOS. The very first lines of the script read two keys from `localStorage` and apply them to the document if they exist:
+
+```javascript title="main.js — tab cloaking implementation"
+// Declare variables for cloak here
+const local_title = localStorage.getItem("title");
+const local_icon  = localStorage.getItem("icon");
+
+// If the window already has a title stored in localStorage
+if (window.localStorage.hasOwnProperty("title")) {
+    document.title = local_title;
+}
+
+// Fetch and set from user's input
+if (window.localStorage.hasOwnProperty("icon")) {
+    document.querySelector("link[rel=icon]").href = local_icon;
+}
+```
+
+The two `hasOwnProperty` checks (rather than a falsy check on the value directly) mean the cloak is applied even when the stored value is an empty string, which effectively blanks the title bar. The `link[rel=icon]` selector targets the `<link>` element already present in the page `<head>`, swapping its `href` before the browser has a chance to display the real favicon.
+
+## Setting a Custom Cloak
+
+Open the browser's developer console on any EmulatorOS page (F12 → Console) and run:
+
+```javascript title="Console — set a custom tab title and favicon"
+// Replace the tab title
+localStorage.setItem("title", "Google Docs");
+
+// Replace the favicon with any publicly accessible image URL
+localStorage.setItem("icon", "https://ssl.gstatic.com/docs/documents/images/kix-favicon7.ico");
+
+// Reload for the changes to take effect
+location.reload();
+```
+
+<Tip>
+  Any reachable image URL works as the icon value — PNG, ICO, SVG, or WebP. Using a small square image (16×16 or 32×32 px) gives the most authentic result in the tab bar.
+</Tip>
+
+## Clearing the Cloak
+
+To restore the real title and favicon, remove the `localStorage` keys and reload:
+
+```javascript title="Console — remove the cloak and restore defaults"
+localStorage.removeItem("title");
+localStorage.removeItem("icon");
+location.reload();
+```
+
+Alternatively, to temporarily override back to a specific title without touching the stored value:
+
+```javascript title="Console — one-off title override (not persisted)"
+document.title = "EmulatorOS";
+document.querySelector("link[rel=icon]").href = "/assets/img/socials/emulatoros.png";
+```
+
+This last approach does not write to `localStorage`, so the cloak will return after the next reload.
+
+## Persistence Behaviour
+
+<Steps>
+  <Step title="User sets cloaking values">
+    The user runs `localStorage.setItem("title", ...)` and `localStorage.setItem("icon", ...)` in the console.
+  </Step>
+  <Step title="main.js reads on every page load">
+    Each time any EmulatorOS page loads, `main.js` executes in the `<head>` context, checks for the two keys, and immediately applies the stored values.
+  </Step>
+  <Step title="Cloak survives across sessions">
+    `localStorage` is scoped to the origin (`emulatoros.github.io`). The stored values persist until the user explicitly removes them or clears their browser storage for that origin.
+  </Step>
+  <Step title="Remove to reveal real identity">
+    `localStorage.removeItem("title")` and `localStorage.removeItem("icon")` followed by a reload fully restores the original page title and favicon.
+  </Step>
+</Steps>
+
+<Note>
+  Tab cloaking is entirely client-side. It only modifies the `document.title` and the `link[rel=icon]` element in the current browser — nothing is sent to any server, and the URL in the address bar remains unchanged. Other users, network monitors, and browser history will still show the real URL.
+</Note>
+
+## Checking Current Cloak Values
+
+To inspect what is currently stored without reloading the page:
+
+```javascript title="Console — inspect current cloak values"
+console.log("Title cloak:", localStorage.getItem("title"));
+console.log("Icon cloak:",  localStorage.getItem("icon"));
+```
+
+If either returns `null`, that key is not set and EmulatorOS will display its default title or favicon for that field.

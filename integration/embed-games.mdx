@@ -1,0 +1,252 @@
+---
+title: "Embed Browser Games with Iframes in EmulatorOS"
+sidebarTitle: "Embed Games"
+description: "Master the EmulatorOS game page pattern: iframe embedding, .bar strip, iFullscreen() button, script load order, and a complete copy-paste HTML template."
+---
+
+Every game page on EmulatorOS follows a single, consistent layout: a content wrapper that positions the game iframe, a metadata bar showing the title and creator, and a description section listing controls. Understanding this structure is essential whether you are adding a new HTML5 game to the catalog or building a standalone page that plugs into the shared `main.js` navbar and tab-cloaking system. The sections below walk through each layer in order, from the outermost wrapper down to the scripts you must load.
+
+## Page Structure Overview
+
+The DOM tree for a standard game page nests five layers before reaching the `<iframe>` itself:
+
+```
+.content-wrapper
+  └── .main-content
+        └── section.content
+              └── .content-container
+                    ├── <iframe>          ← the game
+                    └── .bar             ← title / creator / fullscreen button
+```
+
+Below `.main-content`, a sibling `.desc` block holds the game description and controls list. That block appears after the `section.content` closes, still inside `.main-content`.
+
+## The Game Iframe
+
+The `<iframe>` points to a **game-slug route** under `/gfile/`. The `allowfullscreen` and `scrolling="no"` attributes are required; height is set inline to match the game's native aspect ratio (commonly `506.25px` for 16:9 at 900 px wide, or `480px` for 860 px wide emulator frames).
+
+```html title="Minimal iframe element"
+<iframe
+  src="/gfile/retro-bowl/"
+  allowfullscreen
+  scrolling="no"
+  style="height: 506.25px;"
+></iframe>
+```
+
+For games that need extended permission policies (camera, gamepad API, gyroscope, etc.) you can include the full `allow` attribute as seen in `game.html`:
+
+```html title="Extended permissions iframe"
+<iframe
+  src="/gfile/game-inside/"
+  allowfullscreen="true"
+  webkitallowfullscreen="true"
+  mozallowfullscreen="true"
+  msallowfullscreen="true"
+  allow="autoplay; fullscreen *; geolocation; microphone; camera; midi;
+         monetization; xr-spatial-tracking; gamepad; gyroscope;
+         accelerometer; xr; cross-origin-isolated"
+  scrolling="no"
+  style="width: 960px;"
+  frameborder="0"
+  allowtransparency="true"
+></iframe>
+```
+
+## The `.bar` Strip
+
+Immediately after the `<iframe>`, still inside `.content-container`, lives the `.bar` div. It holds two children: a `.bar-left` group with the game title (`h1#content-title`) and creator (`h3#content-creator`), plus a fullscreen `<button>` that calls the global `iFullscreen()` function defined in `contentpage.js`.
+
+```html title=".bar HTML structure"
+<div class="bar">
+  <div class="bar-left">
+    <h1 id="content-title">Retro Bowl</h1>
+    <h3 id="content-creator">by New Star Games</h3>
+  </div>
+  <button onclick="iFullscreen()">
+    <i class="fas fa-expand fa-2x"></i>
+  </button>
+</div>
+```
+
+The Font Awesome icon class `fas fa-expand fa-2x` renders the expand icon at double size. The Pro CDN link must be present in `<head>` for the icon to render (see the script loading section below).
+
+<Note>
+`iFullscreen()` is provided by `contentpage.js`, not `main.js`. Both scripts must be loaded for the button to work correctly.
+</Note>
+
+## The Description Section
+
+The `.desc` block sits as a sibling of `section.content` inside `.main-content`. It contains an `h1` heading for the description prose and a second `h1` heading for the controls list. Controls items are placed inside a `ul#content-controls` as `<p>` tags:
+
+```html title=".desc structure"
+<div class="desc">
+  <h1>Description</h1>
+  <p id="content-desc">
+    Retro Bowl is an American style football game created by New Star Games.
+  </p>
+
+  <br>
+
+  <h1>Controls</h1>
+  <ul id="content-controls">
+    <p>WASD / Arrow Keys — Control movement</p>
+    <p>Mouse — Drag to throw</p>
+  </ul>
+</div>
+```
+
+## Meta Tags Pattern
+
+Every game page uses four `<meta>` tags in a fixed order: `charset` (via `Content-Type` encoding), then the IE compatibility edge hint, then `viewport`, and then the page-specific `name="title"`, `name="description"`, and `name="language"` tags.
+
+```html title="Standard head meta tags"
+<meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="title" content="EmulatorOS">
+<meta name="description" content="Play your favorite online games free now!">
+<meta name="language" content="English">
+```
+
+## Script Loading Order
+
+Scripts must be loaded at the **bottom of `<body>`** in a specific order: jQuery from the CDN first, then `main.js` (which depends on jQuery for the navbar and scroll handlers), then `contentpage.js` (which defines `iFullscreen()`).
+
+```html title="Required script tags — bottom of body"
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+<script src="/main.js"></script>
+<script src="/contentpage.js"></script>
+```
+
+`main.js` injects the shared navbar, applies tab-cloaking from `localStorage`, and registers Google Analytics. `contentpage.js` provides the `iFullscreen()` fullscreen helper for the iframe.
+
+<Warning>
+Do not swap the order of `main.js` and `contentpage.js`. `main.js` must execute first because it bootstraps the jQuery-based navbar that `contentpage.js` may interact with.
+</Warning>
+
+## Stylesheets
+
+Three stylesheets are required in `<head>`:
+
+```html title="Required link tags — inside head"
+<link rel="stylesheet" href="/main.css">
+<link rel="stylesheet" href="/contentpage.css">
+<link
+  rel="stylesheet"
+  href="https://pro.fontawesome.com/releases/v5.10.0/css/all.css"
+  integrity="sha384-AYmEC3Yw5cVb3ZcuHtOA93w35dYTsvhLPVnYs9eStHfGJvOvKxVfELGroGkvsg+p"
+  crossorigin="anonymous"
+/>
+```
+
+`main.css` styles the global navbar and layout shell. `contentpage.css` styles the game container, bar, and description section. The Font Awesome Pro link is needed for the fullscreen expand icon.
+
+## Complete Minimal Template
+
+The template below is a working, self-contained game page. Replace `YOUR-GAME-SLUG`, `Your Game Title`, `by Studio Name`, the description prose, and the controls list with real values.
+
+```html title="game-template.html"
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="title" content="EmulatorOS">
+  <meta name="description" content="Play Your Game Title free on EmulatorOS.">
+  <meta name="language" content="English">
+  <title>Your Game Title</title>
+  <link rel="icon" type="image/x-icon" href="/assets/img/socials/emulatoros.png" />
+  <link rel="mask-icon" type="" href="/assets/img/socials/emulatoros.png" color="#111" />
+  <link rel="stylesheet" href="/main.css">
+  <link rel="stylesheet" href="/contentpage.css">
+  <link
+    rel="stylesheet"
+    href="https://pro.fontawesome.com/releases/v5.10.0/css/all.css"
+    integrity="sha384-AYmEC3Yw5cVb3ZcuHtOA93w35dYTsvhLPVnYs9eStHfGJvOvKxVfELGroGkvsg+p"
+    crossorigin="anonymous"
+  />
+  <noscript>
+    Your browser doesn't have JavaScript enabled. Please enable JavaScript or
+    switch to a browser that supports it.
+  </noscript>
+  <style>
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Syne', sans-serif;
+      background-color: #000000;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="content-wrapper">
+    <div class="main-content">
+
+      <section class="content">
+        <div class="content-container">
+
+          <iframe
+            src="/gfile/YOUR-GAME-SLUG/"
+            allowfullscreen
+            scrolling="no"
+            style="height: 506.25px;"
+          ></iframe>
+
+          <div class="bar">
+            <div class="bar-left">
+              <h1 id="content-title">Your Game Title</h1>
+              <h3 id="content-creator">by Studio Name</h3>
+            </div>
+            <button onclick="iFullscreen()">
+              <i class="fas fa-expand fa-2x"></i>
+            </button>
+          </div>
+
+        </div>
+      </section>
+
+      <div class="desc">
+        <h1>Description</h1>
+        <p id="content-desc">
+          A brief description of what the game is and who made it.
+        </p>
+
+        <br>
+
+        <h1>Controls</h1>
+        <ul id="content-controls">
+          <p>Arrow Keys — Move</p>
+          <p>Space — Jump</p>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  <script src="/main.js"></script>
+  <script src="/contentpage.js"></script>
+</body>
+
+</html>
+```
+
+<Tip>
+The game slug in the iframe `src` must exactly match the directory name served under `/gfile/`. Check that the slug uses hyphens, all lowercase, and no trailing slash variations that differ from the server routing.
+</Tip>
+
+## Game Pages vs. Emulator Pages
+
+HTML5 web games use the iframe pattern described above — the game content is served from a separate `/gfile/` origin and framed in. ROM-based emulator games (GBA, NES, N64, etc.) use a different pattern: they embed the EmulatorJS engine directly in the page and replace the `<iframe>` with a `<div id="game">` container. See the [EmulatorJS Setup](/integration/emulatorjs-setup) guide for full details on that pattern.
+
+<CardGroup cols={2}>
+  <Card title="EmulatorJS Setup" icon="microchip" href="/integration/emulatorjs-setup">
+    Configure the ROM emulation engine for retro console games.
+  </Card>
+  <Card title="Configuration Reference" icon="sliders" href="/integration/configuration">
+    Full list of every EJS_* global variable and its effect.
+  </Card>
+</CardGroup>

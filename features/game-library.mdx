@@ -1,0 +1,154 @@
+---
+title: "EmulatorOS Game Library: 100+ Browser Games"
+sidebarTitle: "Game Library"
+description: "Explore 100+ free browser games across action, arcade, puzzle, horror, fighting, and emulated retro console titles — all playable instantly, no download needed."
+---
+
+EmulatorOS hosts more than 100 browser games spanning every major genre, from classic arcade cabinets and puzzle staples to console-quality RPGs and fighting games. Every title loads directly inside the browser through a consistent, fullscreen-capable iframe embed. No plugins, no accounts, and no downloads are required — players arrive on a game page and press play.
+
+## Game Categories
+
+The library is organised into loosely themed groups. The examples below are drawn directly from the HTML files shipped in the repository.
+
+<CardGroup cols={2}>
+  <Card title="Action & Shooter" icon="crosshairs">
+    Fast-paced titles including **1v1.lol** (`1v1.html`), **BlockPost** (`blockpost.html`), and **SUPERHOT** (`superhot.html`). Also includes Baldi's Basics, Backrooms, and Sword/Knight combat games.
+  </Card>
+  <Card title="Arcade Classics" icon="joystick">
+    Coin-op icons emulated in the browser: **Ms. Pac-Man** (`mspac.html`), **Jr. Pac-Man** (`jrpac.html`), and **Dig Dug** (`digdug.html`). Also features Donkey Kong (`dk.html`) and Bomberman.
+  </Card>
+  <Card title="Puzzle & Casual" icon="puzzle-piece">
+    Evergreen puzzlers like **2048** (`2048.html`), **Tetris** (`tetris.html`), **Chrome Dino** (`chrome-dino.html`), **Flappy Bird** (`flappy.html`), **Wordle**, **Cookie Clicker**, and **Google Snake**.
+  </Card>
+  <Card title="Papa's Restaurant Series" icon="utensils">
+    The full Flipline Studios collection: **Burgeria**, **Freezeria**, **Pizzeria**, **Scooperia**, **Tacomia**, **Wingeria**, and **Hotdoggeria** — all playable via individual HTML pages.
+  </Card>
+  <Card title="Horror & FNAF" icon="ghost">
+    The complete Five Nights at Freddy's series: **FNAF 1–4** (`fnaf.html` through `fnaf4.html`), plus fan games like **Sans Fight** and **Doki Doki Literature Club Reader**.
+  </Card>
+  <Card title="Fighting" icon="hand-fist">
+    Head-to-head fighters: **Super Smash Flash** (`smash.html`), **Super Smash Flash 2** (`supersmash.html`), **Tekken 3** (`tekken3.html`), **Street Fighter: Bison** (`bison.html`), and **Fighter 2** (`fighter2.html`). Also **1on1** basketball and boxing physics games.
+  </Card>
+  <Card title="Emulated Retro Consoles" icon="gamepad">
+    Console ROMs powered by EmulatorJS: **Pokémon FireRed & Emerald** (GBA), **Super Mario 64**, **Mario Kart 64**, **Zelda: Ocarina of Time** (N64), **Super Mario Bros. 2 & 3**, **Paper Mario**, **Mario Party 3**, **Yoshi's Island**, and **Sonic the Hedgehog 2**.
+  </Card>
+  <Card title="Sports & Racing" icon="flag-checkered">
+    **Retro Bowl**, **Madden** (`madden.html`), **NBA** (`nba.html`, `nba02.html`), **Golf**, **MK Tournament** (`mktournament.html`), **Circuit** (`circuit.html`), and **Drift** (`drift.html`).
+  </Card>
+</CardGroup>
+
+## Game Page Structure
+
+Every game page on EmulatorOS follows the same HTML template. An `<iframe>` pointing to the game's hosted directory sits inside a `.content-container` div. Below the iframe a `.bar` element displays the game title, creator credit, and a fullscreen button that calls `iFullscreen()` from `contentpage.js`.
+
+```html title="retro.html — standard iframe-based game page"
+<div class="content-container">
+    <iframe src="/gfile/retro-bowl/" allowfullscreen scrolling="no" style="height: 506.25px;"></iframe>
+    <div class="bar">
+        <div class="bar-left">
+            <h1 id="content-title">Retro Bowl</h1>
+            <h3 id="content-creator">by New Star Games</h3>
+        </div>
+        <button onclick="iFullscreen()">
+            <i class="fas fa-expand fa-2x"></i>
+        </button>
+    </div>
+</div>
+```
+
+Below the `.content-container`, a `.desc` section provides a prose description of the game and a list of keyboard/mouse controls:
+
+```html title="retro.html — description and controls section"
+<div class="desc">
+    <h1>Description</h1>
+    <p id="content-desc">Retro Bowl is an American style football game created by New Star Games.</p>
+    <br>
+    <h1>Controls</h1>
+    <ul id="content-controls">
+        <p>WASD/Arrow Keys: Control movement</p>
+        <p>Mouse: Drag to throw</p>
+    </ul>
+</div>
+```
+
+## EmulatorJS Game Pages
+
+Games backed by real console ROMs follow a slightly different structure. Instead of an `<iframe>` pointing to a pre-hosted file, they inline the EmulatorJS configuration globals and load `data/loader.js` to boot the emulator directly on the page.
+
+```html title="firered.html — EmulatorJS GBA game page"
+<div class="emscripten" style="width:860px;height:480px;max-width:100%">
+    <div id="game"></div>
+</div>
+
+<script type="text/javascript">
+    EJS_player  = '#game';
+    EJS_core    = 'gba';
+    EJS_biosUrl = '';
+    EJS_gameUrl = '/gdata/Pokemon - FireRed Version (USA, Europe) (Rev 1).gba';
+    EJS_pathtodata = 'data/';
+</script>
+
+<script src="data/loader.js"></script>
+```
+
+```html title="kart64.html — EmulatorJS N64 game page with netplay ID"
+<script type="text/javascript">
+    EJS_player  = '#game';
+    EJS_core    = 'n64';
+    EJS_biosUrl = '';
+    EJS_gameUrl = '/gdata/Mario Kart 64 (USA).z64';
+    EJS_pathtodata = 'data/';
+    EJS_oldEJSNetplayServer = false;
+    EJS_gameID  = 14;
+</script>
+
+<script src="data/loader.js"></script>
+```
+
+<Note>
+  The `EJS_gameID` field is required to enable the netplay lobby for a title. Games without a numeric `EJS_gameID` will have the netplay button hidden in the EmulatorJS toolbar.
+</Note>
+
+## Custom ROM Loader
+
+The `emulatorjs.html` page provides a drag-and-drop ROM loader for players who own their own cartridge backups. Dropping a ROM file onto the styled drop zone triggers the file-type detection logic, which maps common extensions to the correct EmulatorJS core identifier automatically.
+
+```javascript title="emulatorjs.html — automatic core detection by file extension"
+const core = await (async (ext) => {
+    if (["fds", "nes", "unif", "unf"].includes(ext)) return "nes";
+    if (["smc", "fig", "sfc", "gd3", "gd7", "dx2", "bsx", "swc"].includes(ext)) return "snes";
+    if (["z64", "n64"].includes(ext)) return "n64";
+    if (["nds", "gba", "gb"].includes(ext)) return ext;
+
+    // Ambiguous extension — show a system selector UI
+    return await new Promise(resolve => {
+        const cores = {
+            "Nintendo 64": "n64",
+            "Nintendo Game Boy": "gb",
+            "Nintendo Game Boy Advance": "gba",
+            "Nintendo DS": "nds",
+            "Nintendo Entertainment System": "nes",
+            "Super Nintendo Entertainment System": "snes",
+            "PlayStation": "psx",
+            "Virtual Boy": "vb",
+            "Sega Mega Drive": "segaMD",
+            "Sega Master System": "segaMS",
+            "Sega CD": "segaCD",
+            "Atari Lynx": "lynx",
+            "Sega 32X": "sega32x",
+            "Atari Jaguar": "jaguar",
+            "Sega Game Gear": "segaGG",
+            "Sega Saturn": "segaSaturn",
+            "Atari 7800": "atari7800",
+            "Atari 2600": "atari2600"
+        };
+        // ... builds <select> + Load button
+    });
+})(parts.pop());
+```
+
+Once a core is selected, the loader creates an `EJS_player` div, sets the required globals from the `File` object URL, and appends `data/loader.js` to the page — launching the emulator with the player's own ROM in exactly the same way a pre-hosted game page does.
+
+<Tip>
+  Players can access the custom ROM loader at `/emulatorjs.html`. For ambiguous file types (e.g. `.bin`), the page renders a system-selection dropdown before starting the emulator.
+</Tip>
