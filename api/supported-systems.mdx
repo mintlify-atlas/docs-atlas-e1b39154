@@ -1,7 +1,7 @@
 ---
 title: "Supported Consoles and Emulation Cores in EmulatorJS"
 sidebarTitle: "Supported Systems"
-description: "Full table of every emulated console on EmulatorOS with EJS_core values, internal LibRetro core names, accepted ROM extensions, and platform-specific notes."
+description: "Full table of every emulated console on EmulatorOS with EJS_core values, internal LibRetro core names, accepted ROM extensions, and platform notes."
 ---
 
 EmulatorJS runs each emulated system through a dedicated LibRetro core compiled to WebAssembly. The `EJS_core` value you set on your page determines which core is loaded — EmulatorJS's `getCore()` method translates the human-friendly system name into the exact core filename, then downloads the `.wasm` and `.data` bundles for that core. The `version` field on the `EmulatorJS` class (currently `7`) increments whenever the bundled core binaries are updated, triggering a cache miss in `EJS_STORAGE` so users automatically receive the newer build.
@@ -59,7 +59,7 @@ Any `EJS_core` value not present in this table is passed through as-is, allowing
 | PlayStation | `psx` | `pcsx_rearmed` | `bin`, `cue`, `img`, `mdf`, `pbp`, `toc`, `cbn`, `m3u`, `ccd` |
 | PlayStation Portable | `psp` | `ppsspp` | `elf`, `iso`, `cso`, `prx`, `pbp` |
 | Virtual Boy | `vb` | `beetle_vb` | `vb`, `vboy`, `bin` |
-| Sega Mega Drive / Genesis | `segaMD` | `genesis_plus_gx` | `md`, `smd`, `gen`, `bin`, `cue`, `iso`, `chd`, `bms`, `68k`, `sgd` |
+| Sega Mega Drive / Genesis | `segaMD` | `genesis_plus_gx` | `md`, `mdx`, `smd`, `gen`, `bin`, `cue`, `iso`, `chd`, `bms`, `68k`, `sgd`, `m3u` |
 | Sega Master System | `segaMS` | `genesis_plus_gx` | `sms`, `sg` |
 | Sega Game Gear | `segaGG` | `genesis_plus_gx` | `gg` |
 | Sega CD | `segaCD` | `genesis_plus_gx` | `cue`, `iso`, `chd`, `m3u` |

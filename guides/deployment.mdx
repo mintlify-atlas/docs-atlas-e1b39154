@@ -101,6 +101,14 @@ jobs:
   `actions/deploy-pages@v1` publishes the artifact to the GitHub Pages CDN. The live URL is emitted as `steps.deployment.outputs.page_url` and displayed in the workflow summary.
 </Steps>
 
+### Additional Workflow: Code Minification
+
+The repository also ships with a second workflow at `.github/workflows/static.yml` named **Minify Code**. It runs on every push and pull request, detects whether any file under `data/` has changed, and if so runs the minification build (`data/minify/npm run build`) then commits the resulting `emulator.min.js` and `emulator.min.css` files back to the branch via `EndBug/add-and-commit`. This workflow is separate from the Pages deployment — the minification commit it produces will itself trigger `pages.yml` to redeploy.
+
+<Note>
+  The minification workflow requires Node.js 12 and the `data/minify/` directory. You do not need to run it manually — it fires automatically whenever source files under `data/` change.
+</Note>
+
 ### Enabling GitHub Pages for a Fork
 
 If you have forked EmulatorOS and want to deploy your own instance:

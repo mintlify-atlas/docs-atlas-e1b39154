@@ -1,5 +1,5 @@
 ---
-title: "EmulatorJS Events: Callbacks and Lifecycle Hooks"
+title: "EmulatorJS Events Reference: Lifecycle Callbacks and Hooks"
 sidebarTitle: "Events"
 description: "Reference for the EmulatorJS event system — the on() method, all lifecycle events, global callback shorthands, and patterns for post-start automation."
 ---
@@ -116,15 +116,24 @@ window.EJS_emulator.on("start", () => {
 
 ### `load`
 
-**Fires when:** A save state has been loaded (either via `quickLoad`, `loadState`, or `EJS_loadStateURL`).
+**Fires when:** The user clicks the **Load State** button in the emulator UI. When a listener is registered, the emulator passes control to it and skips its default load behaviour (file picker or browser storage read), letting your handler supply the state bytes directly.
 
 **Payload:** none
 
 **Global shorthand:** Set `window.EJS_onLoadState` before `loader.js`.
 
+<Note>
+This event fires from the **Load State** toolbar button only — not from programmatic calls to `quickLoad()` or `loadState()`. If your listener is registered, `callEvent` returns a non-zero count and the emulator will **not** open its default file picker. Use this when you want to restore state from a custom source (e.g. server-side storage).
+</Note>
+
 ```js
 window.EJS_emulator.on("load", () => {
-    showToast("Save state restored!");
+    const b64 = localStorage.getItem("ejs_save");
+    if (b64) {
+        const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+        window.EJS_emulator.gameManager.loadState(bytes);
+        showToast("State restored from localStorage!");
+    }
 });
 ```
 
@@ -132,15 +141,28 @@ window.EJS_emulator.on("load", () => {
 
 ### `save`
 
-**Fires when:** A save state has been written (either via `quickSave`, `getState`, or a user interaction in the UI).
+**Fires when:** The user clicks the **Save State** button in the emulator UI. When a listener is registered, the emulator passes `data` to the callback and skips its default save behaviour (file download or browser storage), letting your handler take over.
 
-**Payload:** none
+**Payload:** `{ screenshot: Uint8Array, state: Uint8Array }`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `screenshot` | `Uint8Array` | PNG bytes of the current frame at save time (from `screenshot()`) |
+| `state` | `Uint8Array` | Full serialised save-state bytes (from `getState()`) |
 
 **Global shorthand:** Set `window.EJS_onSaveState` before `loader.js`.
 
+<Note>
+This event fires from the **Save State** toolbar button only — not from programmatic calls to `quickSave()` or `getState()`. If your listener is registered, `callEvent` returns a non-zero count and the emulator will **not** perform its default save action. This is an intercept pattern: use it when you want full control over where states are persisted.
+</Note>
+
 ```js
-window.EJS_emulator.on("save", () => {
-    showToast("Progress saved.");
+window.EJS_emulator.on("save", (data) => {
+    // data.state  → Uint8Array of the save state
+    // data.screenshot → Uint8Array PNG
+    const b64 = btoa(String.fromCharCode(...data.state));
+    localStorage.setItem("ejs_save", b64);
+    showToast("State saved to localStorage!");
 });
 ```
 
@@ -193,7 +215,7 @@ window.EJS_emulator.on("start", async () => {
     `start` fires. `gameManager` is now available. You can load save states, configure cheats, or begin automated testing.
   </Step>
   <Step title="Ongoing: load / save events">
-    Fire whenever the user (or your code) saves or restores a state.
+    Fire when the user clicks the Save State or Load State toolbar buttons. Register listeners to intercept and override the default file-picker / browser-storage behaviour.
   </Step>
 </Steps>
 
@@ -214,14 +236,14 @@ window.EJS_onGameStart = function() {
     console.log("Game started");
 };
 
-// Runs when a state is loaded
+// Intercepts the Load State button click; emulator skips its default file picker
 window.EJS_onLoadState = function() {
-    console.log("State loaded");
+    console.log("Load State button clicked — supply state bytes manually");
 };
 
-// Runs when a state is saved
-window.EJS_onSaveState = function() {
-    console.log("State saved");
+// Intercepts the Save State button click; receives { screenshot, state } payload
+window.EJS_onSaveState = function(data) {
+    console.log("Save State button clicked — state bytes available in data.state");
 };
 ```
 
@@ -275,12 +297,21 @@ document.addEventListener("DOMContentLoaded", () => {
         }, 60_000);
     });
 
-    emu.on("save", () => {
+    // "save" intercepts the Save State button — data.state contains the state bytes
+    emu.on("save", (data) => {
+        const b64 = btoa(String.fromCharCode(...data.state));
+        localStorage.setItem("ejs_autosave", b64);
         showToast("State saved!");
     });
 
+    // "load" intercepts the Load State button — supply state bytes yourself
     emu.on("load", () => {
-        showToast("State loaded!");
+        const saved = localStorage.getItem("ejs_autosave");
+        if (saved) {
+            const bytes = Uint8Array.from(atob(saved), c => c.charCodeAt(0));
+            emu.gameManager.loadState(bytes);
+            showToast("State loaded!");
+        }
     });
 });
 ```

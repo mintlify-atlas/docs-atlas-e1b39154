@@ -1,7 +1,7 @@
 ---
-title: "Install EmulatorOS as a PWA on Any Device"
+title: "Install EmulatorOS as a Progressive Web App on Any Device"
 sidebarTitle: "PWA Install"
-description: "EmulatorOS is a fully installable Progressive Web App with a cache-first service worker, fullscreen manifest, and automatic install prompts on desktop and mobile."
+description: "Learn how EmulatorOS uses a service worker and Web App Manifest to enable offline play and home screen installation on desktop and mobile."
 ---
 
 EmulatorOS ships as a first-class Progressive Web App (PWA). Once a visitor loads the site over HTTPS, the browser registers a service worker that intercepts all network requests and serves cached responses instantly on repeat visits. A Web App Manifest declares the app's identity, icon, and display preferences so browsers know how to install it to the home screen or taskbar. Together these two pieces give players a native-app feel — launch from the home screen, fill the entire display, and play even when the network drops out.

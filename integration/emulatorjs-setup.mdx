@@ -1,5 +1,5 @@
 ---
-title: "Set Up EmulatorJS for ROM Emulation on Your Site"
+title: "EmulatorJS Setup: Host the Engine and Configure ROM Pages"
 sidebarTitle: "EmulatorJS Setup"
 description: "Host the EmulatorJS engine, wire EJS_* globals, pick the right core for each console, and run ROMs in-browser — with drag-and-drop loader walkthrough."
 ---
@@ -138,7 +138,6 @@ On Safari for iOS, `n64` automatically falls back to `parallel_n64` (`parallel_n
 | `segaCD` | Sega CD / Mega-CD | `genesis_plus_gx-wasm.data` |
 | `sega32x` | Sega 32X | `picodrive-wasm.data` |
 | `segaSaturn` | Sega Saturn | `yabause-wasm.data` |
-| `sega` | Generic Sega (alias) | `genesis_plus_gx-wasm.data` |
 
   </Tab>
   <Tab title="Atari & Others">
@@ -180,7 +179,7 @@ Each core accepts specific ROM file extensions. The table below lists accepted f
 | `vb` | `.vb`, `.vboy`, `.bin` |
 | `psx` | `.bin`, `.cue`, `.img`, `.mdf`, `.pbp`, `.toc`, `.cbn`, `.m3u`, `.ccd` |
 | `psp` | `.elf`, `.iso`, `.cso`, `.prx`, `.pbp` |
-| `segaMD` / `segaMS` / `segaGG` / `segaCD` / `sega` | `.m3u`, `.mdx`, `.md`, `.smd`, `.gen`, `.bin`, `.cue`, `.iso`, `.chd`, `.sms`, `.gg`, `.sg` |
+| `segaMD` / `segaMS` / `segaGG` / `segaCD` | `.m3u`, `.mdx`, `.md`, `.smd`, `.gen`, `.bin`, `.cue`, `.iso`, `.chd`, `.bms`, `.sms`, `.gg`, `.sg`, `.68k`, `.sgd` |
 | `sega32x` | `.bin`, `.gen`, `.smd`, `.md`, `.32x`, `.cue`, `.iso`, `.sms`, `.68k`, `.chd` |
 | `segaSaturn` | `.cue`, `.iso`, `.ccd`, `.mds`, `.chd`, `.zip`, `.m3u` |
 | `atari2600` | `.a26`, `.bin`, `.zip` |

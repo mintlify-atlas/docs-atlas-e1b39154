@@ -1,7 +1,7 @@
 ---
-title: "EmulatorOS: Open-Source Browser Gaming Platform"
+title: "EmulatorOS: Open-Source HTML5 and Retro Gaming Platform"
 sidebarTitle: "Introduction"
-description: "EmulatorOS is a browser-based gaming platform delivering 100+ HTML5 games and retro console emulation via WebAssembly, deployable as a static GitHub Pages site."
+description: "EmulatorOS delivers 100+ HTML5 games and retro console emulation via WebAssembly, running entirely in the browser as a static GitHub Pages site."
 ---
 
 EmulatorOS is a fully static, open-source gaming platform that runs entirely in the browser — no servers, no downloads, no accounts required. It combines two independent pillars under one roof: a curated library of 100+ HTML5 web games playable directly in an `<iframe>`, and a deep retro console emulation layer powered by EmulatorJS (a WebAssembly port of the libretro/RetroArch ecosystem). Both pillars are served from GitHub Pages at zero infrastructure cost. The platform ships as **v1.4.0** (semantic versioning: Major.Minor.Patch, defined in `main.js`) and is installable as a Progressive Web App, meaning players can pin it to their home screen and continue playing offline.
@@ -33,7 +33,7 @@ EmulatorOS is deliberately simple: every file is static, meaning the entire plat
 
 ## Supported Emulator Cores
 
-EmulatorJS ships 25 WebAssembly core `.data` files in `data/cores/`. Each core handles one or more console families:
+EmulatorJS ships 26 WebAssembly core `.data` files in `data/cores/`. Each core handles one or more console families:
 
 | System | Core |
 |---|---|
@@ -68,7 +68,7 @@ The platform targets **GitHub Pages** as its primary host. Because everything is
 
 ## Localization
 
-The emulation UI supports 14 languages via JSON translation files in `data/localization/`. Set the `EJS_language` global before loading `loader.js` to activate a locale. Available locales include `ar-AR`, `de-GER`, `es-ES`, `fr` (via `af-FR`), `hi-HI`, `ja-JA`, `ko-KO`, `pt-BR`, `ru-RU`, `zh-CN`, and more.
+The emulation UI supports 14 languages via JSON translation files in `data/localization/`. Set the `EJS_language` global before loading `loader.js` to activate a locale. Available locales are: `af-FR`, `ar-AR`, `ben-BEN`, `de-GER`, `el-GR`, `en`, `es-ES`, `hi-HI`, `ja-JA`, `jv-JV`, `ko-KO`, `pt-BR`, `ru-RU`, and `zh-CN`.
 
 ## Next Steps
 

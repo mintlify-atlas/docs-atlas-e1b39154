@@ -234,24 +234,28 @@ See the [Events](/api/events) page for all available event names and their paylo
 
 ### `getCore(generic?)`
 
-Returns the resolved internal core name for the currently configured system.
+Returns the resolved core name for the currently configured system.
 
 <ParamField path="generic" type="boolean">
-  When `true`, returns the generic family name (e.g. `"sega"`, `"n64"`, `"psx"`) rather than the specific core filename. When `false` or omitted, returns the exact LibRetro core name (e.g. `"genesis_plus_gx"`, `"mupen64plus_next"`).
+  When `false` or omitted, translates the user-facing `EJS_core` alias (e.g. `"snes"`) into the exact LibRetro core filename (e.g. `"snes9x"`). When `true`, performs a reverse lookup: if `config.system` is an internal core name (e.g. `"snes9x"`), it returns the generic family string (e.g. `"snes"`). If `config.system` is a user-facing alias that is not in the reverse map, it is returned unchanged. This flag is used internally — most integration code calls `getCore()` with no arguments.
 </ParamField>
 
 ```js title="getCore examples"
 // EJS_core = "snes"
 window.EJS_emulator.getCore()         // → "snes9x"
-window.EJS_emulator.getCore(true)     // → "snes"
+window.EJS_emulator.getCore(true)     // → "snes"  (not in reverse map, passes through)
 
 // EJS_core = "segaMD"
+window.EJS_emulator.getCore()         // → "genesis_plus_gx"
+window.EJS_emulator.getCore(true)     // → "segaMD" (not in reverse map, passes through)
+
+// EJS_core = "genesis_plus_gx"  (set to internal core name directly)
 window.EJS_emulator.getCore()         // → "genesis_plus_gx"
 window.EJS_emulator.getCore(true)     // → "sega"
 ```
 
 <Note>
-On Safari for iOS/iPadOS, `getCore()` automatically returns `"parallel_n64"` instead of `"mupen64plus_next"` when the system is `"n64"`, because mupen64plus_next is not compatible with Safari's WebAssembly threading model on mobile.
+On Safari for iOS/iPadOS, `getCore()` automatically returns `"parallel_n64"` instead of `"mupen64plus_next"` when the system is `"n64"`, because mupen64plus_next requires SharedArrayBuffer threading that is not always available on mobile Safari.
 </Note>
 
 ---
@@ -307,8 +311,8 @@ Inspects the magic bytes of `data` and decompresses it using a Web Worker if it 
   Raw bytes to inspect and potentially decompress.
 </ParamField>
 
-<ParamField path="msg" type="string" required>
-  Progress label displayed in the loading text element while decompression is in progress (e.g. `"Decompress Game Data"`).
+<ParamField path="msg" type="string">
+  Progress label displayed in the loading text element while decompression is in progress (e.g. `"Decompress Game Data"`). Optional — if omitted the loading text is not updated.
 </ParamField>
 
 <ParamField path="fileCbFunc" type="function">

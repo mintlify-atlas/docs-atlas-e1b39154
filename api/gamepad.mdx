@@ -1,7 +1,7 @@
 ---
-title: "GamepadHandler: Physical Controller API Reference"
+title: "GamepadHandler: Physical Gamepad Controller API Reference"
 sidebarTitle: "GamepadHandler"
-description: "Reference for the GamepadHandler class — polling navigator.getGamepads(), firing button and axis events, configuring dead zones, and terminating the polling loop."
+description: "GamepadHandler API reference: polling navigator.getGamepads(), dead-zone filtering, and button, axis, and connection events for physical controllers."
 ---
 
 `GamepadHandler` is a self-contained polling class that wraps the browser's [Gamepad API](https://developer.mozilla.org/en-US/docs/Web/API/Gamepad_API) in a simple event-driven interface. Instead of relying on the browser's `gamepadconnected`/`gamepaddisconnected` DOM events — which have inconsistent cross-browser support — `GamepadHandler` calls `navigator.getGamepads()` on a 10 ms interval and computes diffs between the previous and current states to fire precise `buttondown`, `buttonup`, and `axischanged` events. The class is exported to `window.GamepadHandler` and is instantiated internally by `EmulatorJS` for its input mapping system.

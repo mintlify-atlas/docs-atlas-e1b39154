@@ -1,5 +1,5 @@
 ---
-title: "Enable Cheat Codes and GLSL Shaders in EmulatorJS"
+title: "Enable Cheat Codes and GLSL Shaders in EmulatorJS Games"
 sidebarTitle: "Cheats & Shaders"
 description: "Pre-load cheat codes via EJS_cheats, manage them at runtime with EJS_GameManager, and apply custom GLSL shaders through the EJS_SHADERS global."
 ---
@@ -147,7 +147,7 @@ EmulatorJS supports custom GLSL shaders that run as a post-processing pass over 
 ```
 
 <Warning>
-  When `EJS_SHADERS` is defined, the Settings panel replaces the built-in shader selector with your custom shaders. The built-in presets (`crt-easymode.glslp`, `crt-aperture.glslp`, etc.) are only available when `EJS_SHADERS` is **not** set.
+  The shader Settings menu is only rendered when `window.EJS_SHADERS` is defined. The menu entries are a hardcoded set of preset names (`disabled`, `2xScaleHQ.glslp`, `4xScaleHQ.glslp`, `crt-easymode.glslp`, `crt-aperture.glslp`, `crt-geom.glslp`, `crt-mattias.glslp`). Your `EJS_SHADERS` keys must match these names exactly for the shader activation path in `emulator.js` to find the correct GLSL source.
 </Warning>
 
 ### How Shaders Are Loaded — `initShaders()`
@@ -234,7 +234,7 @@ if (window.EJS_SHADERS) {
 }
 ```
 
-Every key in your `EJS_SHADERS` object should match one of the keys the menu will reference. Shaders only take effect after the emulator core has fully started — they cannot be applied during the loading screen.
+The menu is only rendered when `window.EJS_SHADERS` is a non-null object, but the selectable shader names are always the hardcoded preset list above. Your `EJS_SHADERS` keys must match one of those preset names so that when the user selects one, `emulator.js` can look up `window.EJS_SHADERS[value]` to retrieve the GLSL source. Shaders only take effect after the emulator core has fully started — they cannot be applied during the loading screen.
 
 ### GLSL Shader Tips
 

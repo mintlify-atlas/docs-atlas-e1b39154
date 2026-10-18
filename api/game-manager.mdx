@@ -1,7 +1,7 @@
 ---
 title: "EJS_GameManager: Emulator Control Methods Reference"
 sidebarTitle: "GameManager"
-description: "Complete method reference for the EJS_GameManager class — covering save states, save files, playback controls, input simulation, cheats, rendering, core options, and multi-disc."
+description: "EJS_GameManager method reference: save states, save files, playback controls, input simulation, cheats, shaders, core options, and multi-disc support."
 ---
 
 `EJS_GameManager` is the runtime control layer that sits between your JavaScript and the compiled WebAssembly core. It is instantiated internally by `EmulatorJS` once the core has finished loading, and is exposed at `window.EJS_emulator.gameManager`. Every method it exposes is a thin wrapper around a corresponding C function exported from the LibRetro core via Emscripten's `cwrap`. Save files are persisted through IDBFS — a filesystem layer mounted at `/data/saves` and synced to IndexedDB — so progress survives page reloads automatically.
@@ -207,16 +207,6 @@ Sets the fast-forward speed multiplier. The default configured in `getRetroArchC
 window.EJS_emulator.gameManager.setFastForwardRatio(5.0);
 window.EJS_emulator.gameManager.toggleFastForward(1);
 ```
-
----
-
-### `toggleRewind(active)`
-
-Enables (`1`) or disables (`0`) the rewind buffer. Rewind must have been enabled at construction time via `window.EJS_rewindEnabled` (which sets `rewind_enable = true` in `retroarch.cfg`). Calling this when rewind is disabled is a no-op.
-
-<ParamField path="active" type="number" required>
-  `1` to start rewinding, `0` to stop.
-</ParamField>
 
 ---
 

@@ -1,7 +1,7 @@
 ---
-title: "EmulatorJS: WebAssembly Retro Console Emulation"
+title: "EmulatorJS: In-Browser WebAssembly Console Emulation"
 sidebarTitle: "EmulatorJS Engine"
-description: "Deep-dive into the EmulatorJS WebAssembly engine: 20+ supported systems, save states, virtual gamepad, shaders, netplay, and the full loader.js bootstrap flow."
+description: "EmulatorJS WebAssembly engine: 20+ supported systems, save states, virtual gamepad, shader support, netplay, and the full loader.js bootstrap flow."
 ---
 
 EmulatorJS is a WebAssembly-based in-browser emulation engine derived from RetroArch's libretro cores. EmulatorOS embeds it directly on retro game pages so players can run console ROMs without installing anything. The engine compiles each platform's emulator core to WASM, exposes a JavaScript configuration API through a set of `EJS_*` globals, and manages the entire lifecycle — ROM download, BIOS loading, save-state persistence, input routing, and rendering — inside a single `<div>` on the host page.
@@ -40,7 +40,7 @@ The constructor receives two arguments: `element` (a CSS selector string matchin
 |---|---|---|
 | `nes` | `fceumm` | Also `nestopia` as an alternative |
 | `snes` | `snes9x` | |
-| `gb` / `gbc` | `gambatte` | |
+| `gb` | `gambatte` | Also handles `.gbc` and `.dmg` files via extension detection |
 | `gba` | `mgba` | |
 | `n64` | `mupen64plus_next` | Falls back to `parallel_n64` on mobile Safari |
 | `nds` | `melonds` | Also `desmume2015` |
@@ -267,7 +267,7 @@ Both flags are checked in the constructor: `this.netplayEnabled = (window.EJS_DE
 
 The UI supports 14 language locales via JSON files in `data/localization/`. Set `EJS_language` to any of the supported locale codes and `loader.js` will fetch the corresponding file and pass it to the engine:
 
-```
+```text
 af-FR, ar-AR, ben-BEN, de-GER, el-GR, en, es-ES,
 hi-HI, ja-JA, jv-JV, ko-KO, pt-BR, ru-RU, zh-CN
 ```

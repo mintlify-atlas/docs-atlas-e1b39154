@@ -1,10 +1,10 @@
 ---
-title: "Localize EmulatorJS UI into 15+ Languages"
+title: "Localize the EmulatorJS Player UI into 14 Languages"
 sidebarTitle: "Localization"
 description: "Configure the EmulatorJS player UI for any supported locale, override translation paths, detect missing keys, and contribute new language files."
 ---
 
-EmulatorJS ships with 14 translation files covering languages from Arabic to Simplified Chinese. Every string in the player UI — toolbar tooltips, menu labels, shader names, control settings headings — is looked up at runtime through a central localization function. Setting a single global variable before loading `loader.js` is all that is required to switch the entire interface to a different language.
+EmulatorJS ships with 14 translation files covering languages from Afrikaans to Simplified Chinese. Every string in the player UI — toolbar tooltips, menu labels, shader names, control settings headings — is looked up at runtime through a central localization function. Setting a single global variable before loading `loader.js` is all that is required to switch the entire interface to a different language.
 
 ## Setting the Active Language
 
@@ -176,6 +176,7 @@ Every translation file mirrors the structure of `en.json`. Below is an annotated
             "options": {
                 "disabled":            "Discapacitado",
                 "2xScaleHQ.glslp":     "2xScaleHQ",
+                "4xScaleHQ.glslp":     "4xScaleHQ",
                 "crt-easymode.glslp":  "CRT easymode",
                 "crt-aperture.glslp":  "CRT aperture",
                 "crt-geom.glslp":      "CRT geom",
@@ -184,18 +185,18 @@ Every translation file mirrors the structure of `en.json`. Below is an annotated
             "default": "disabled"
         },
         "virtual-gamepad": {
-            "label": "Gamepad Virtual",
+            "label": "Controles Virtuales",
             "options": {
-                "disabled": "Desactivar",
-                "enabled":  "Activar"
+                "disabled": "Discapacitado",
+                "enabled":  "Activado"
             },
             "default": "enabled"
         }
     },
     "Control Settings": "Ajustes de control",
     "Player 1": "Jugador 1",
-    "Reset":    "Reset",
-    "Close":    "Cerrar"
+    "Reset":    "Reiniciar",
+    "Close":    "Cerca"
 }
 ```
 

@@ -1,7 +1,7 @@
 ---
-title: "Add New Games to Your EmulatorOS Instance"
+title: "Add HTML5 and ROM Games to Your EmulatorOS Instance"
 sidebarTitle: "Adding Games"
-description: "Learn how to add HTML5 iframe games and ROM-based emulated games to EmulatorOS, from file structure to navigation integration."
+description: "Learn how to add HTML5 iframe games and ROM-based emulated games to EmulatorOS, covering file structure, EJS_core values, and navigation integration."
 ---
 
 Every game on EmulatorOS lives as a standalone HTML file at the repository root. The page wraps the game in a consistent `content-wrapper` layout, loads shared scripts, and exposes a fullscreen button and a description section. Whether you are embedding a third-party HTML5 title in an iframe or wiring up a retro ROM through EmulatorJS, the shell structure is the same — only the content area differs.
@@ -50,7 +50,7 @@ Before creating the file, determine which delivery mechanism your game needs.
       href="https://pro.fontawesome.com/releases/v5.10.0/css/all.css"
       integrity="sha384-AYmEC3Yw5cVb3ZcuHtOA93w35dYTsvhLPVnYs9eStHfGJvOvKxVfELGroGkvsg+p"
       crossorigin="anonymous" />
-    <noscript>Your browser doesn't have JavaScript enabled.</noscript>
+    <noscript>Your browser doesn't have JavaScript enabled. Please enable JavaScript or switch to a browser that supports it.</noscript>
     <style>
       html { scroll-behavior: smooth; }
       body {
@@ -171,7 +171,7 @@ Before creating the file, determine which delivery mechanism your game needs.
   | Nintendo 64 | `n64` | `mupen64plus_next-wasm.data` / `parallel_n64-wasm.data` |
   | Game Boy / Game Boy Color | `gb` | `gambatte-wasm.data` |
   | Game Boy Advance | `gba` | `mgba-wasm.data` |
-  | Nintendo DS | `nds` | `melonds-wasm.data` |
+  | Nintendo DS | `nds` | `melonds-wasm.data` / `desmume2015-wasm.data` |
   | PlayStation | `psx` | `pcsx_rearmed-wasm.data` / `mednafen_psx_hw-wasm.data` |
   | Sega Mega Drive / Genesis | `segaMD` | `genesis_plus_gx-wasm.data` / `picodrive-wasm.data` |
   | Sega Master System | `segaMS` | `genesis_plus_gx-wasm.data` |
@@ -180,6 +180,7 @@ Before creating the file, determine which delivery mechanism your game needs.
   | Sega Game Gear | `segaGG` | `genesis_plus_gx-wasm.data` |
   | Sega Saturn | `segaSaturn` | `yabause-wasm.data` |
   | Atari 2600 | `atari2600` | `stella2014-wasm.data` |
+  | Atari 5200 | `atari5200` | `a5200-wasm.data` |
   | Atari 7800 | `atari7800` | `prosystem-wasm.data` |
   | Atari Lynx | `lynx` | `handy-wasm.data` |
   | Atari Jaguar | `jaguar` | `virtualjaguar-wasm.data` |
@@ -187,6 +188,9 @@ Before creating the file, determine which delivery mechanism your game needs.
   | PlayStation Portable | `psp` | `ppsspp-wasm.data` |
   | 3DO | `3do` | `opera-wasm.data` |
   | Arcade (FBNeo) | `arcade` | `fbneo-wasm.data` |
+  | Arcade (CPS-1) | `arcade` | `fbalpha2012_cps1-wasm.data` |
+  | Arcade (CPS-2) | `arcade` | `fbalpha2012_cps2-wasm.data` |
+  | MAME 2003 | `mame2003` | `mame2003-wasm.data` |
 
   <Note>
     The drag-and-drop ROM loader at `emulatorjs.html` auto-detects core by file extension. For programmatic page creation, always set `EJS_core` explicitly.

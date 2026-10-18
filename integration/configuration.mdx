@@ -23,7 +23,7 @@ These four globals must be defined on every EmulatorJS page. Omitting any of the
 <ParamField path="EJS_core" type="string" required>
   System identifier that selects the emulator core. Must be one of the following values:
 
-  `nes`, `snes`, `n64`, `gba`, `gb`, `nds`, `psx`, `vb`, `sega`, `segaMS`, `segaCD`, `segaMD`, `segaGG`, `sega32x`, `segaSaturn`, `lynx`, `atari2600`, `atari7800`, `atari5200`, `jaguar`, `arcade`, `mame2003`, `3do`, `psp`
+  `nes`, `snes`, `n64`, `gba`, `gb`, `nds`, `psx`, `vb`, `segaMD`, `segaMS`, `segaGG`, `segaCD`, `sega32x`, `segaSaturn`, `lynx`, `atari2600`, `atari7800`, `atari5200`, `jaguar`, `arcade`, `mame2003`, `3do`, `psp`
 
   ```js
   window.EJS_core = "gba";
@@ -299,7 +299,7 @@ These four globals must be defined on every EmulatorJS page. Omitting any of the
 </ParamField>
 
 <ParamField path="EJS_SHADERS" type="object">
-  Map of shader preset names to GLSL shader source strings. When a user selects a shader preset in the settings menu, the engine writes the corresponding source to `/shader/shader.glslp` in the WASM virtual filesystem.
+  Map of shader preset names to GLSL shader source strings. Read directly from `window` by `emulator.js` (not mapped through `loader.js` config). When a user selects a shader preset in the settings menu, the engine writes the corresponding source to `/shader/shader.glslp` in the WASM virtual filesystem.
 
   ```js
   window.EJS_SHADERS = {
@@ -438,15 +438,13 @@ These four globals must be defined on every EmulatorJS page. Omitting any of the
 </ParamField>
 
 <ParamField path="EJS_adBlocked" type="function">
-  Callback invoked when an ad URL is blocked or fails to load. After the loader runs, `window.EJS_adBlocked` is overwritten with a closure that calls `window.EJS_emulator.adBlocked(url, del)`. You can define this before `loader.js` runs to capture the call, but the loader will replace your definition.
+  Convenience proxy set by `loader.js` after the emulator instance is created. It is not a user-configurable callback — `loader.js` unconditionally assigns it as:
 
   ```js
-  // Define before loader.js to intercept ad-blocked events
-  window.EJS_adBlocked = function (url, del) {
-    console.warn("Ad blocked:", url);
-    del(); // call del() to proceed without the ad
-  };
+  window.EJS_adBlocked = (url, del) => window.EJS_emulator.adBlocked(url, del);
   ```
+
+  Call `window.EJS_adBlocked(url, del)` from your own code after `loader.js` has run to trigger the engine's ad-blocked handler directly. Any value you assign before `loader.js` executes will be overwritten.
 </ParamField>
 
 ---
